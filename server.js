@@ -13,7 +13,7 @@ const app = express();
 // Environment-driven CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://healthoratest.netlify.app'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://healthoraweb.netlify.app'];
 
 const corsOptions = {
   origin: function (origin, callback) {
