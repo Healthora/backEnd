@@ -109,7 +109,7 @@ export const addPatient = async (req, res, next) => {
                 message: 'Un patient avec ces informations existe déjà'
             });
         }
-        next(err); 
+        next(err);
     }
 };
 
@@ -140,7 +140,7 @@ export const updatePatient = async (req, res, next) => {
 
         const [existingPatient] = await pool.query(
             'SELECT id FROM patients WHERE id = ? AND doctor_id = ?',
-            [patientId, req.user.id]
+            [patientId, req.doctor.doctorId]
         );
 
         if (existingPatient.length === 0) {
@@ -188,7 +188,7 @@ export const updatePatient = async (req, res, next) => {
 
     } catch (err) {
         console.error('Error updating patient:', err);
-        next(err); 
+        next(err);
     }
 };
 
@@ -198,7 +198,7 @@ export const deletePatient = async (req, res, next) => {
 
         const [result] = await pool.query(
             'DELETE FROM patients WHERE id = ? AND doctor_id = ?',
-            [patientId, req.user.id]
+            [patientId, req.doctor.doctorId]
         );
 
         if (result.affectedRows === 0) {
@@ -215,6 +215,6 @@ export const deletePatient = async (req, res, next) => {
 
     } catch (err) {
         console.error('Error deleting patient:', err);
-        next(err); 
+        next(err);
     }
 };

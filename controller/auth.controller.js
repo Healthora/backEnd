@@ -2,7 +2,6 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../database.js';
 
-
 export const signUp = async (req, res, next) => {
     const connection = await pool.getConnection();
     try {
@@ -307,4 +306,3 @@ export const getCurrentDoctor = async (req, res, next) => {
         });
     }
 };
-

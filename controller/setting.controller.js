@@ -1,4 +1,4 @@
-import  pool  from '../database.js';
+import pool from '../database.js';
 
 
 export const updateProfilSetting = async (req, res, next) => {
@@ -7,7 +7,7 @@ export const updateProfilSetting = async (req, res, next) => {
         const doctorId = req.doctor.doctorId;
 
         if (!email || !firstName || !lastName || !phone || !specialty) {
-            return res.status(404).json({
+            return res.status(400).json({
                 success: false,
                 message: 'Veuillez remplir tous les champs obligatoires'
             })
@@ -15,7 +15,7 @@ export const updateProfilSetting = async (req, res, next) => {
 
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
-            return res.status(404).json({
+            return res.status(400).json({
                 success: false,
                 message: 'email invalide'
             });

@@ -9,9 +9,9 @@ appointmentRouter.use(verifyToken);
 
 appointmentRouter.post('/', createAppointment);
 appointmentRouter.get('/doctor/:doctorId', getAppointments);
+appointmentRouter.get('/patient/:patientId', getAppointmentsByPatient);
 appointmentRouter.put('/:id/status', updateAppointmentStatus);
 appointmentRouter.put('/:id', updateAppointment);
 appointmentRouter.delete('/:id', deleteAppointment);
-appointmentRouter.get('/patient/:patientId', getAppointmentsByPatient);
 
 export default appointmentRouter;
