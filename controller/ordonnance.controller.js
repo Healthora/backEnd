@@ -170,10 +170,18 @@ const uploadToCloudinary = (pdfBuffer) =>
   new Promise((resolve, reject) => {
     cloudinary.uploader
       .upload_stream(
-        { folder: "doctorapp/prescriptions", resource_type: "raw", format: "pdf" },
+        {
+          folder: "doctorapp/prescriptions",
+          resource_type: "auto"
+        },
         (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
+          if (error) {
+            console.error("Cloudinary Upload Error:", error);
+            reject(error);
+          } else {
+            console.log("Cloudinary Upload Success:", result.secure_url);
+            resolve(result);
+          }
         }
       )
       .end(pdfBuffer);
