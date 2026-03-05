@@ -148,11 +148,15 @@ const buildPrescriptionHTML = ({
   `;
 };
 
-// ─── Shared helper: generate PDF buffer via Puppeteer ─────────────────────────
+
 const generatePdfBuffer = async (htmlContent) => {
   const browser = await puppeteer.launch({
     headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage"
+    ],
   });
   const page = await browser.newPage();
   await page.setContent(htmlContent);
@@ -161,7 +165,7 @@ const generatePdfBuffer = async (htmlContent) => {
   return pdfBuffer;
 };
 
-// ─── Shared helper: upload PDF buffer to Cloudinary ───────────────────────────
+
 const uploadToCloudinary = (pdfBuffer) =>
   new Promise((resolve, reject) => {
     cloudinary.uploader
@@ -175,7 +179,7 @@ const uploadToCloudinary = (pdfBuffer) =>
       .end(pdfBuffer);
   });
 
-// ─── Shared helper: extract Cloudinary public ID from URL ─────────────────────
+
 const extractPublicId = (url) => url.split("/").pop().split(".")[0];
 
 export const getOrdonnancesByPatient = async (req, res) => {
@@ -235,6 +239,15 @@ export const createOrdonnance = async (req, res) => {
 
     const doctor_id = req.doctor.doctorId;
 
+    // VALIDATION: Ensure required IDs for the prescriptions table are present
+    if (!appointment_id || !patient_id) {
+      console.error("Missing required IDs in createOrdonnance:", { appointment_id, patient_id });
+      return res.status(400).json({
+        success: false,
+        message: "L'ID du rendez-vous et l'ID du patient sont obligatoires."
+      });
+    }
+
     const html = buildPrescriptionHTML({
       doctorName,
       doctorSpecialty,
@@ -248,22 +261,25 @@ export const createOrdonnance = async (req, res) => {
     const pdfBuffer = await generatePdfBuffer(html);
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
-    const safeAppointmentId = appointment_id || null;
-
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url)
        VALUES (?, ?, ?, ?)`,
-      [safeAppointmentId, doctor_id, patient_id, uploadResult.secure_url]
+      [appointment_id, doctor_id, patient_id, uploadResult.secure_url]
     );
 
     res.status(201).json({
       success: true,
       message: "Ordonnance created successfully",
       url: uploadResult.secure_url,
+      id: result.insertId
     });
   } catch (error) {
-    console.error("Create ordonnance error:", error);
-    res.status(500).json({ success: false, message: "Failed to create ordonnance" });
+    console.error("Create ordonnance internal error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create ordonnance",
+      error: error.message
+    });
   }
 };
 
