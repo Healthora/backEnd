@@ -1,5 +1,4 @@
 import pool from "../database.js";
-// Updated to fix status column issue
 
 export const getAllPatient = async (req, res, next) => {
     try {

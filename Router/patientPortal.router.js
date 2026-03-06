@@ -1,0 +1,30 @@
+import { Router } from "express";
+import {
+    patientSignUp,
+    patientSignIn
+} from "../controller/auth.controller.js";
+import {
+    getDoctors,
+    getDoctorDetails,
+    bookAppointment,
+    getMyAppointments,
+    getMyPrescriptions
+} from "../controller/patientPortal.controller.js";
+import { verifyPatientToken } from "../middleware/auth.middleware.js";
+
+const portalRouter = Router();
+
+// Auth Public
+portalRouter.post('/auth/signup', patientSignUp);
+portalRouter.post('/auth/signin', patientSignIn);
+
+// Search Public
+portalRouter.get('/doctors', getDoctors);
+portalRouter.get('/doctors/:id', getDoctorDetails);
+
+// Patient Private
+portalRouter.post('/appointments', verifyPatientToken, bookAppointment);
+portalRouter.get('/appointments/me', verifyPatientToken, getMyAppointments);
+portalRouter.get('/prescriptions/me', verifyPatientToken, getMyPrescriptions);
+
+export default portalRouter;

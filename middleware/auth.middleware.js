@@ -109,3 +109,23 @@ export const optionalAuth = async (req, res, next) => {
         next();
     }
 };
+
+export const verifyPatientToken = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ success: false, message: 'Non autorisé' });
+        }
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.role !== 'patient') {
+            return res.status(403).json({ success: false, message: 'Patients uniquement' });
+        }
+        const [users] = await pool.query('SELECT id, email FROM patient_users WHERE id = ?', [decoded.patientId]);
+        if (users.length === 0) return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
+        req.patient = { id: users[0].id, email: users[0].email };
+        next();
+    } catch (error) {
+        return res.status(401).json({ success: false, message: 'Session invalide' });
+    }
+};

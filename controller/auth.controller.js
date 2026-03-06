@@ -306,3 +306,88 @@ export const getCurrentDoctor = async (req, res, next) => {
         });
     }
 };
+
+export const patientSignUp = async (req, res) => {
+    try {
+        const { firstName, lastName, email, password, phone, address, birthDate, gender } = req.body;
+
+        if (!firstName || !lastName || !email || !password) {
+            return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
+        }
+
+        const [existing] = await pool.query('SELECT id FROM patient_users WHERE email = ?', [email]);
+        if (existing.length > 0) {
+            return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        const [result] = await pool.query(
+            `INSERT INTO patient_users (email, password, first_name, last_name, phone, address, birth_date, gender) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [email, passwordHash, firstName, lastName, phone, address, birthDate, gender || 'M']
+        );
+
+        const token = jwt.sign(
+            { patientId: result.insertId, email, role: 'patient' },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Compte patient créé',
+            token,
+            patient: { id: result.insertId, email, firstName, lastName }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+};
+
+export const patientSignIn = async (req, res) => {
+    try {
+        const { phone, password } = req.body;
+
+        if (!phone || !password) {
+            return res.status(400).json({ success: false, message: 'Téléphone et mot de passe requis' });
+        }
+
+        const [users] = await pool.query('SELECT * FROM patient_users WHERE phone = ?', [phone]);
+        if (users.length === 0) {
+            return res.status(401).json({ success: false, message: 'Identifiants invalides' });
+        }
+
+        const user = users[0];
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) {
+            return res.status(401).json({ success: false, message: 'Identifiants invalides' });
+        }
+
+        const token = jwt.sign(
+            { patientId: user.id, email: user.email, role: 'patient' },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        res.status(200).json({
+            success: true,
+            token,
+            patient: {
+                id: user.id,
+                email: user.email,
+                firstName: user.first_name,
+                lastName: user.last_name,
+                phone: user.phone,
+                address: user.address,
+                birthDate: user.birth_date,
+                gender: user.gender
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+};
