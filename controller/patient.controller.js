@@ -23,10 +23,11 @@ export const getAllPatient = async (req, res, next) => {
                 p.first_name LIKE ? OR 
                 p.last_name LIKE ? OR 
                 p.email LIKE ? OR 
-                p.phone LIKE ?
+                p.phone LIKE ? OR
+                p.address LIKE ?
             )`;
             const searchPattern = `%${searchTerm}%`;
-            queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
+            queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
         }
 
         query += ` GROUP BY p.id`;
@@ -46,7 +47,7 @@ export const getAllPatient = async (req, res, next) => {
 
 export const addPatient = async (req, res, next) => {
     try {
-        const { firstName, lastName, email, phone, birthday, gender, doctorId } = req.body;
+        const { firstName, lastName, email, phone, birthday, gender, doctorId, address } = req.body;
 
         if (!firstName || !lastName || !phone || !email) {
             return res.status(400).json({
@@ -85,9 +86,9 @@ export const addPatient = async (req, res, next) => {
 
         const [result] = await pool.query(
             `INSERT INTO patients 
-             (doctor_id, first_name, last_name, email, phone, birth_date, gender, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-            [doctorId, firstName, lastName, email || null, phone, birthday || null, gender || 'M']
+             (doctor_id, first_name, last_name, email, phone, birth_date, gender, address) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [doctorId, firstName, lastName, email || null, phone, birthday || null, gender || 'M', address || null]
         );
 
         const [newPatient] = await pool.query(
@@ -116,7 +117,7 @@ export const addPatient = async (req, res, next) => {
 export const updatePatient = async (req, res, next) => {
     try {
         const patientId = req.params.patientId;
-        const { firstName, lastName, email, phone, birthday, gender, status } = req.body;
+        const { firstName, lastName, email, phone, birthday, gender, address } = req.body;
 
         if (phone) {
             const phoneRegex = /^0[567]\d{8}$/;
@@ -159,7 +160,7 @@ export const updatePatient = async (req, res, next) => {
         if (phone) { updates.push('phone = ?'); values.push(phone); }
         if (birthday !== undefined) { updates.push('birth_date = ?'); values.push(birthday || null); }
         if (gender) { updates.push('gender = ?'); values.push(gender); }
-        if (status) { updates.push('status = ?'); values.push(status); }
+        if (address !== undefined) { updates.push('address = ?'); values.push(address || null); }
 
         if (updates.length === 0) {
             return res.status(400).json({
