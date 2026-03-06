@@ -173,13 +173,16 @@ const generatePdfBuffer = async (htmlContent) => {
 
 const uploadToCloudinary = (pdfBuffer) =>
   new Promise((resolve, reject) => {
+    const buffer = Buffer.from(pdfBuffer); // ✅ Ensure it's a proper Node.js Buffer
+
     cloudinary.uploader
       .upload_stream(
         {
           folder: "doctorapp/prescriptions",
-          resource_type: "raw",   
+          resource_type: "raw",
+          format: "pdf",          // ✅ Explicitly tell Cloudinary the file type
           type: "upload",
-          access_mode: "public",  
+          access_mode: "public",
         },
         (error, result) => {
           if (error) {
@@ -191,7 +194,7 @@ const uploadToCloudinary = (pdfBuffer) =>
           }
         }
       )
-      .end(pdfBuffer);
+      .end(buffer);
   });
 
 
