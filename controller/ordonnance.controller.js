@@ -2,13 +2,19 @@ import puppeteer from "puppeteer";
 import { v2 as cloudinary } from "cloudinary";
 import pool from "../database.js";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true
 });
 
 const buildPrescriptionHTML = ({
@@ -172,7 +178,8 @@ const uploadToCloudinary = (pdfBuffer) =>
       .upload_stream(
         {
           folder: "doctorapp/prescriptions",
-          resource_type: "auto"
+          resource_type: "auto",
+          access_mode: "public"
         },
         (error, result) => {
           if (error) {
