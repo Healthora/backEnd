@@ -178,7 +178,8 @@ const uploadToCloudinary = (pdfBuffer) =>
       .upload_stream(
         {
           folder: "doctorapp/prescriptions",
-          resource_type: "auto",
+          resource_type: "image", // Treat PDF as image for better delivery/preview support
+          type: "upload",         // Explicitly set as public upload
           access_mode: "public"
         },
         async (error, result) => {
@@ -190,7 +191,9 @@ const uploadToCloudinary = (pdfBuffer) =>
               // Explicitly set access_mode to public if it was blocked
               await cloudinary.uploader.update(result.public_id, {
                 access_mode: "public",
-                resource_type: result.resource_type || "image"
+                type: "upload",
+                resource_type: "image",
+                invalidate: true
               });
               console.log("Cloudinary Upload Success & Access Updated:", result.secure_url);
               resolve(result);
