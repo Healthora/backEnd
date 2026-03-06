@@ -171,36 +171,23 @@ const generatePdfBuffer = async (htmlContent) => {
   return pdfBuffer;
 };
 
-
 const uploadToCloudinary = (pdfBuffer) =>
   new Promise((resolve, reject) => {
     cloudinary.uploader
       .upload_stream(
         {
           folder: "doctorapp/prescriptions",
-          resource_type: "image", // Treat PDF as image for better delivery/preview support
-          type: "upload",         // Explicitly set as public upload
-          access_mode: "public"
+          resource_type: "raw",   
+          type: "upload",
+          access_mode: "public",  
         },
-        async (error, result) => {
+        (error, result) => {
           if (error) {
             console.error("Cloudinary Upload Error:", error);
             reject(error);
           } else {
-            try {
-              // Explicitly set access_mode to public if it was blocked
-              await cloudinary.uploader.update(result.public_id, {
-                access_mode: "public",
-                type: "upload",
-                resource_type: "image",
-                invalidate: true
-              });
-              console.log("Cloudinary Upload Success & Access Updated:", result.secure_url);
-              resolve(result);
-            } catch (updateError) {
-              console.warn("Cloudinary Access Update warning:", updateError);
-              resolve(result); // Proceed anyway if the update fails but upload succeeded
-            }
+            console.log("Cloudinary Upload Success:", result.secure_url);
+            resolve(result);
           }
         }
       )
