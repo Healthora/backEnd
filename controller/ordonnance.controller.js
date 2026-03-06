@@ -4,7 +4,6 @@ import pool from "../database.js";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -173,14 +172,14 @@ const generatePdfBuffer = async (htmlContent) => {
 
 const uploadToCloudinary = (pdfBuffer) =>
   new Promise((resolve, reject) => {
-    const buffer = Buffer.from(pdfBuffer); // ✅ Ensure it's a proper Node.js Buffer
+    const buffer = Buffer.from(pdfBuffer);
 
     cloudinary.uploader
       .upload_stream(
         {
           folder: "doctorapp/prescriptions",
           resource_type: "raw",
-          format: "pdf",          // ✅ Explicitly tell Cloudinary the file type
+          format: "pdf",
           type: "upload",
           access_mode: "public",
         },
@@ -280,9 +279,9 @@ export const createOrdonnance = async (req, res) => {
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
     const [result] = await pool.query(
-      `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url)
-       VALUES (?, ?, ?, ?)`,
-      [appointment_id, doctor_id, patient_id, uploadResult.secure_url]
+      `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url, medicaments)
+       VALUES (?, ?, ?, ?, ?)`,
+      [appointment_id, doctor_id, patient_id, uploadResult.secure_url, JSON.stringify(medicaments)]
     );
 
     res.status(201).json({
@@ -382,10 +381,10 @@ export const updateOrdonnance = async (req, res) => {
     const pdfBuffer = await generatePdfBuffer(html);
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
-    // FIX: removed "updated_at = NOW()" — that column does not exist in the schema
+    
     await pool.query(
-      `UPDATE prescriptions SET cloudinary_url = ? WHERE id = ?`,
-      [uploadResult.secure_url, id]
+      `UPDATE prescriptions SET cloudinary_url = ?, medicaments = ? WHERE id = ?`,
+      [uploadResult.secure_url, JSON.stringify(medicaments), id]
     );
 
     res.status(200).json({
