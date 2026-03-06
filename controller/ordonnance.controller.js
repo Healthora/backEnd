@@ -181,13 +181,23 @@ const uploadToCloudinary = (pdfBuffer) =>
           resource_type: "auto",
           access_mode: "public"
         },
-        (error, result) => {
+        async (error, result) => {
           if (error) {
             console.error("Cloudinary Upload Error:", error);
             reject(error);
           } else {
-            console.log("Cloudinary Upload Success:", result.secure_url);
-            resolve(result);
+            try {
+              // Explicitly set access_mode to public if it was blocked
+              await cloudinary.uploader.update(result.public_id, {
+                access_mode: "public",
+                resource_type: result.resource_type || "image"
+              });
+              console.log("Cloudinary Upload Success & Access Updated:", result.secure_url);
+              resolve(result);
+            } catch (updateError) {
+              console.warn("Cloudinary Access Update warning:", updateError);
+              resolve(result); // Proceed anyway if the update fails but upload succeeded
+            }
           }
         }
       )
