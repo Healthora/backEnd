@@ -34,7 +34,7 @@ export const getDoctorDetails = async (req, res) => {
     try {
         const { id } = req.params;
         const [doctors] = await pool.query(
-            `SELECT d.*, c.name as cabinet_name, c.address as cabinet_address, c.schedule, c.id as cabinet_id
+            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, c.name as cabinet_name, c.address as cabinet_address, c.schedule, c.id as cabinet_id
              FROM doctors d
              LEFT JOIN cabinets c ON d.id = c.doctor_id
              WHERE d.id = ?`,
