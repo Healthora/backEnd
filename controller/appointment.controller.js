@@ -4,12 +4,12 @@ export const createAppointment = async (req, res) => {
     try {
         const {
             patient_id,
-            doctor_id,
             cabinet_id,
             appointment_date,
             visit_type,
             notes
         } = req.body;
+        const doctor_id = req.doctor.doctorId;
 
         if (!patient_id || !doctor_id || !cabinet_id || !appointment_date || !visit_type) {
             return res.status(400).json({
@@ -63,6 +63,13 @@ export const getAppointments = async (req, res) => {
             });
         }
 
+        if (parseInt(doctorId, 10) !== req.doctor.doctorId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Non autorisé à accéder aux rendez-vous d\'un autre médecin'
+            });
+        }
+
         const [appointments] = await pool.query(
             `SELECT 
                 a.id,
@@ -106,9 +113,17 @@ export const updateAppointmentStatus = async (req, res) => {
         const { id } = req.params;
         const { status } = req.body;
 
+        const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine'];
+        if (!status || !validStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: `Statut invalide. Valeurs acceptées: ${validStatuses.join(', ')}`
+            });
+        }
+
         const [result] = await pool.query(
-            'UPDATE appointments SET status = ? WHERE id = ?',
-            [status, id]
+            'UPDATE appointments SET status = ? WHERE id = ? AND doctor_id = ?',
+            [status, id, req.doctor.doctorId]
         );
 
         if (result.affectedRows === 0) {
@@ -144,7 +159,7 @@ export const updateAppointment = async (req, res) => {
         } = req.body;
 
         // Check if appointment exists
-        const [existing] = await pool.query('SELECT * FROM appointments WHERE id = ?', [id]);
+        const [existing] = await pool.query('SELECT * FROM appointments WHERE id = ? AND doctor_id = ?', [id, req.doctor.doctorId]);
         if (existing.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -164,6 +179,13 @@ export const updateAppointment = async (req, res) => {
             values.push(visit_type);
         }
         if (status) {
+            const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine'];
+            if (!validStatuses.includes(status)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Statut invalide. Valeurs acceptées: ${validStatuses.join(', ')}`
+                });
+            }
             updates.push('status = ?');
             values.push(status);
         }
@@ -179,10 +201,10 @@ export const updateAppointment = async (req, res) => {
             });
         }
 
-        values.push(id);
+        values.push(id, req.doctor.doctorId);
 
         await pool.query(
-            `UPDATE appointments SET ${updates.join(', ')} WHERE id = ?`,
+            `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND doctor_id = ?`,
             values
         );
 
@@ -205,7 +227,10 @@ export const deleteAppointment = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const [result] = await pool.query('DELETE FROM appointments WHERE id = ?', [id]);
+        const [result] = await pool.query(
+            'DELETE FROM appointments WHERE id = ? AND doctor_id = ?',
+            [id, req.doctor.doctorId]
+        );
 
         if (result.affectedRows === 0) {
             return res.status(404).json({
@@ -252,9 +277,9 @@ export const getAppointmentsByPatient = async (req, res) => {
                 notes,
                 created_at
             FROM appointments 
-            WHERE patient_id = ?
+            WHERE patient_id = ? AND doctor_id = ?
             ORDER BY appointment_date DESC, created_at DESC`,
-            [patientId]
+            [patientId, req.doctor.doctorId]
         );
 
         res.status(200).json({

@@ -58,8 +58,8 @@ export const bookAppointment = async (req, res) => {
         const { doctor_id, cabinet_id, appointment_date, visit_type, notes } = req.body;
         const patient_user_id = req.patient.id;
 
-        if (!doctor_id || !appointment_date) {
-            return res.status(400).json({ success: false, message: 'Données manquantes' });
+        if (!doctor_id || !cabinet_id || !appointment_date) {
+            return res.status(400).json({ success: false, message: 'Données manquantes: doctor_id, cabinet_id et appointment_date sont obligatoires' });
         }
 
         // We also need a 'patient_id' record in the doctor's private patient table if it doesn't exist?
@@ -74,6 +74,9 @@ export const bookAppointment = async (req, res) => {
             // Create a shadow record in the doctor's private CRM
             const [user] = await pool.query('SELECT * FROM patient_users WHERE id = ?', [patient_user_id]);
             const u = user[0];
+            if (!u) {
+                return res.status(404).json({ success: false, message: 'Compte patient introuvable' });
+            }
             const [insertResult] = await pool.query(
                 `INSERT INTO patients (doctor_id, first_name, last_name, email, phone, address, birth_date, gender)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

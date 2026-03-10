@@ -97,7 +97,7 @@ export const signUp = async (req, res, next) => {
                 doctorId: doctorId,
                 email: email
             },
-            process.env.JWT_SECRET || 'fallback_secret',
+            process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
 

@@ -3,6 +3,14 @@ import pool from "../database.js";
 export const getAllPatient = async (req, res, next) => {
     try {
         const doctorId = req.params.id;
+
+        if (parseInt(doctorId, 10) !== req.doctor.doctorId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Non autorisé à accéder aux patients d\'un autre médecin'
+            });
+        }
+
         const searchTerm = req.query.search || '';
         let query = `
             SELECT 
@@ -47,7 +55,8 @@ export const getAllPatient = async (req, res, next) => {
 
 export const addPatient = async (req, res, next) => {
     try {
-        const { firstName, lastName, email, phone, birthday, gender, doctorId, address } = req.body;
+        const { firstName, lastName, email, phone, birthday, gender, address } = req.body;
+        const doctorId = req.doctor.doctorId;
 
         if (!firstName || !lastName || !phone || !email) {
             return res.status(400).json({

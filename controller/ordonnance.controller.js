@@ -278,10 +278,23 @@ export const createOrdonnance = async (req, res) => {
     const pdfBuffer = await generatePdfBuffer(html);
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
+    // Fetch patient_user_id from the appointment so the patient portal can retrieve this prescription
+    const [appointmentRows] = await pool.query(
+      `SELECT patient_user_id FROM appointments WHERE id = ? AND doctor_id = ?`,
+      [appointment_id, doctor_id]
+    );
+    if (appointmentRows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Rendez-vous introuvable ou non autorisé."
+      });
+    }
+    const patient_user_id = appointmentRows[0].patient_user_id;
+
     const [result] = await pool.query(
-      `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url, medicaments)
-       VALUES (?, ?, ?, ?, ?)`,
-      [appointment_id, doctor_id, patient_id, uploadResult.secure_url, JSON.stringify(medicaments)]
+      `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url, medicaments, patient_user_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [appointment_id, doctor_id, patient_id, uploadResult.secure_url, JSON.stringify(medicaments), patient_user_id]
     );
 
     res.status(201).json({
