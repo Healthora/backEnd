@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   createOrdonnance,
-  getOrdonnancesByPatient,
+  getOrdonnancesByPatientPhone,
   getOrdonnancesByDoctor,
   updateOrdonnance,
   deleteOrdonnance,
@@ -18,7 +18,7 @@ ordonnanceRouter.get('/', (req, res) => {
 
 ordonnanceRouter.post('/', createOrdonnance);
 
-ordonnanceRouter.get('/patient/:patient_id', getOrdonnancesByPatient);
+ordonnanceRouter.get('/patient/:patient_phone', getOrdonnancesByPatientPhone);
 ordonnanceRouter.get('/doctor/:doctor_id', getOrdonnancesByDoctor);
 
 ordonnanceRouter.put('/:id', updateOrdonnance);

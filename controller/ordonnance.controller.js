@@ -199,19 +199,23 @@ const uploadToCloudinary = (pdfBuffer) =>
 
 const extractPublicId = (url) => url.split("/").pop().split(".")[0];
 
-export const getOrdonnancesByPatient = async (req, res) => {
+export const getOrdonnancesByPatientPhone = async (req, res) => {
   try {
-    const { patient_id } = req.params;
-    const doctor_id = req.doctor.doctorId;
+    const { patient_phone } = req.params;
 
+    // We join the 'patients' table to match by phone globally
     const [rows] = await pool.query(
-      `SELECT * FROM prescriptions WHERE patient_id = ? AND doctor_id = ? ORDER BY created_at DESC`,
-      [patient_id, doctor_id]
+      `SELECT pr.* 
+       FROM prescriptions pr
+       JOIN patients pt ON pr.patient_id = pt.id
+       WHERE pt.phone = ?
+       ORDER BY pr.created_at DESC`,
+      [patient_phone]
     );
 
     res.status(200).json({ success: true, data: rows });
   } catch (error) {
-    console.error("Get ordonnances error:", error);
+    console.error("Get ordonnances by phone error:", error);
     res.status(500).json({ success: false, message: "Failed to retrieve ordonnances" });
   }
 };
