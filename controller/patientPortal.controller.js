@@ -42,10 +42,10 @@ export const getDoctorDetails = async (req, res) => {
         );
 
         if (doctors.length === 0) return res.status(404).json({ success: false, message: 'Introuvable' });
-        
+
         const doc = doctors[0];
         doc.schedule = typeof doc.schedule === 'string' ? JSON.parse(doc.schedule) : doc.schedule;
-        
+
         res.status(200).json({ success: true, data: doc });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -141,3 +141,91 @@ export const getMyPrescriptions = async (req, res) => {
         res.status(500).json({ success: false, message: 'Erreur lors de la récupération des ordonnances' });
     }
 };
+
+// Get current patient profile
+export const getMyProfile = async (req, res) => {
+    try {
+        const [users] = await pool.query(
+            `SELECT id, email, first_name, last_name, phone, address, birth_date, gender, bio
+             FROM patient_users WHERE id = ?`,
+            [req.patient.id]
+        );
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: 'Profil introuvable' });
+        }
+        const u = users[0];
+        res.status(200).json({
+            success: true,
+            data: {
+                id: u.id,
+                email: u.email,
+                firstName: u.first_name,
+                lastName: u.last_name,
+                phone: u.phone,
+                address: u.address,
+                birthDate: u.birth_date,
+                gender: u.gender,
+                bio: u.bio
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+};
+
+// Update current patient profile
+export const updateMyProfile = async (req, res) => {
+    try {
+        const { firstName, lastName, phone, address, birthDate, gender, bio } = req.body;
+
+        // Build dynamic update query with only provided fields
+        const fields = [];
+        const values = [];
+
+        if (firstName !== undefined) { fields.push('first_name = ?'); values.push(firstName.trim()); }
+        if (lastName !== undefined)  { fields.push('last_name = ?');  values.push(lastName.trim()); }
+        if (phone !== undefined)     { fields.push('phone = ?');      values.push(phone.trim()); }
+        if (address !== undefined)   { fields.push('address = ?');    values.push(address); }
+        if (birthDate !== undefined) { fields.push('birth_date = ?'); values.push(birthDate); }
+        if (gender !== undefined)    { fields.push('gender = ?');     values.push(gender); }
+        if (bio !== undefined)       { fields.push('bio = ?');        values.push(bio); }
+
+        if (fields.length === 0) {
+            return res.status(400).json({ success: false, message: 'Aucune donnée à mettre à jour' });
+        }
+
+        values.push(req.patient.id);
+        await pool.query(
+            `UPDATE patient_users SET ${fields.join(', ')} WHERE id = ?`,
+            values
+        );
+
+        // Return fresh data
+        const [updated] = await pool.query(
+            `SELECT id, email, first_name, last_name, phone, address, birth_date, gender, bio
+             FROM patient_users WHERE id = ?`,
+            [req.patient.id]
+        );
+        const u = updated[0];
+        res.status(200).json({
+            success: true,
+            message: 'Profil mis à jour',
+            data: {
+                id: u.id,
+                email: u.email,
+                firstName: u.first_name,
+                lastName: u.last_name,
+                phone: u.phone,
+                address: u.address,
+                birthDate: u.birth_date,
+                gender: u.gender,
+                bio: u.bio
+            }
+        });
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour du profil' });
+    }
+};
+

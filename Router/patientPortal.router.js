@@ -8,7 +8,9 @@ import {
     getDoctorDetails,
     bookAppointment,
     getMyAppointments,
-    getMyPrescriptions
+    getMyPrescriptions,
+    updateMyProfile,
+    getMyProfile
 } from "../controller/patientPortal.controller.js";
 import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
@@ -26,5 +28,9 @@ portalRouter.get('/doctors/:id', getDoctorDetails);
 portalRouter.post('/appointments', verifyPatientToken, bookAppointment);
 portalRouter.get('/appointments/me', verifyPatientToken, getMyAppointments);
 portalRouter.get('/prescriptions/me', verifyPatientToken, getMyPrescriptions);
+
+// Profile
+portalRouter.get('/me', verifyPatientToken, getMyProfile);
+portalRouter.put('/me', verifyPatientToken, updateMyProfile);
 
 export default portalRouter;
