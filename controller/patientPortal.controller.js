@@ -290,3 +290,25 @@ export const deleteAppointment = async (req, res) => {
     }
 };
 
+// Temporary migration to fix database constraints
+export const migrateSchema = async (req, res) => {
+    try {
+        console.log("Starting database migration...");
+        
+        // Try to alter the table to make status a VARCHAR instead of ENUM if it was one
+        await pool.query("ALTER TABLE appointments MODIFY COLUMN status VARCHAR(100) DEFAULT 'nouveau'");
+        
+        // Also ensure patient_user_id column exists just in case
+        const [columns] = await pool.query("SHOW COLUMNS FROM appointments LIKE 'patient_user_id'");
+        if (columns.length === 0) {
+             await pool.query("ALTER TABLE appointments ADD COLUMN patient_user_id INT NULL");
+             console.log("Added patient_user_id column");
+        }
+
+        console.log("Migration finished successfully");
+        res.status(200).json({ success: true, message: "Base de données mise à jour avec succès" });
+    } catch (error) {
+        console.error("Migration error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
