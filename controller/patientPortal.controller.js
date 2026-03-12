@@ -229,3 +229,32 @@ export const updateMyProfile = async (req, res) => {
     }
 };
 
+// Cancel an appointment
+export const cancelAppointment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const patient_user_id = req.patient.id;
+
+        // Check if appointment belongs to this patient
+        const [appointments] = await pool.query(
+            "SELECT id FROM appointments WHERE id = ? AND patient_user_id = ?",
+            [id, patient_user_id]
+        );
+
+        if (appointments.length === 0) {
+            return res.status(404).json({ success: false, message: 'Rendez-vous introuvable ou non autorisé' });
+        }
+
+        // Update status to 'annule'
+        await pool.query(
+            "UPDATE appointments SET status = 'annule' WHERE id = ?",
+            [id]
+        );
+
+        res.status(200).json({ success: true, message: 'Rendez-vous annulé' });
+    } catch (error) {
+        console.error('Error cancelling appointment:', error);
+        res.status(500).json({ success: false, message: 'Erreur serveur lors de l\'annulation' });
+    }
+};
+

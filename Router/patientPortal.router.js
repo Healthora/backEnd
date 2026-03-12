@@ -10,7 +10,8 @@ import {
     getMyAppointments,
     getMyPrescriptions,
     updateMyProfile,
-    getMyProfile
+    getMyProfile,
+    cancelAppointment
 } from "../controller/patientPortal.controller.js";
 import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
@@ -27,6 +28,7 @@ portalRouter.get('/doctors/:id', getDoctorDetails);
 // Patient Private
 portalRouter.post('/appointments', verifyPatientToken, bookAppointment);
 portalRouter.get('/appointments/me', verifyPatientToken, getMyAppointments);
+portalRouter.post('/appointments/:id/cancel', verifyPatientToken, cancelAppointment);
 portalRouter.get('/prescriptions/me', verifyPatientToken, getMyPrescriptions);
 
 // Profile
