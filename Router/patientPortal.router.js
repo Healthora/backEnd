@@ -12,7 +12,8 @@ import {
     updateMyProfile,
     getMyProfile,
     cancelAppointment,
-    deleteAppointment
+    deleteAppointment,
+    migrateSchema
 } from "../controller/patientPortal.controller.js";
 import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
@@ -21,6 +22,8 @@ const portalRouter = Router();
 // Auth Public
 portalRouter.post('/auth/signup', patientSignUp);
 portalRouter.post('/auth/signin', patientSignIn);
+portalRouter.get('/migrate-schema', migrateSchema); // Temp route to fix DB
+
 
 // Search Public
 portalRouter.get('/doctors', getDoctors);
