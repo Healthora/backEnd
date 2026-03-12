@@ -19,7 +19,7 @@ export const createAppointment = async (req, res) => {
         }
 
         const status = 'nouveau';
-        const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine'];
+        const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine', 'annule'];
 
         const reqStatus = req.body.status;
         const finalStatus = (reqStatus && validStatuses.includes(reqStatus)) ? reqStatus : 'nouveau';
@@ -113,7 +113,7 @@ export const updateAppointmentStatus = async (req, res) => {
         const { id } = req.params;
         const { status } = req.body;
 
-        const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine'];
+        const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine', 'annule'];
         if (!status || !validStatuses.includes(status)) {
             return res.status(400).json({
                 success: false,
@@ -179,7 +179,7 @@ export const updateAppointment = async (req, res) => {
             values.push(visit_type);
         }
         if (status) {
-            const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine'];
+            const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine', 'annule'];
             if (!validStatuses.includes(status)) {
                 return res.status(400).json({
                     success: false,
