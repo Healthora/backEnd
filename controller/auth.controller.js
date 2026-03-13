@@ -329,8 +329,29 @@ export const patientSignUp = async (req, res) => {
             [email, passwordHash, firstName, lastName, phone, address, birthDate, gender || 'M']
         );
 
+        const newUserId = result.insertId;
+
+        if (phone) {
+            // Sychroniser les données existantes (Late Registration Bug)
+            await pool.query(
+                `UPDATE appointments a 
+                 JOIN patients p ON a.patient_id = p.id 
+                 SET a.patient_user_id = ? 
+                 WHERE p.phone = ?`,
+                [newUserId, phone]
+            );
+            
+            await pool.query(
+                `UPDATE prescriptions pr 
+                 JOIN patients p ON pr.patient_id = p.id 
+                 SET pr.patient_user_id = ? 
+                 WHERE p.phone = ?`,
+                [newUserId, phone]
+            );
+        }
+
         const token = jwt.sign(
-            { patientId: result.insertId, email, role: 'patient' },
+            { patientId: newUserId, email, role: 'patient' },
             process.env.JWT_SECRET,
             { expiresIn: '30d' }
         );
@@ -339,7 +360,7 @@ export const patientSignUp = async (req, res) => {
             success: true,
             message: 'Compte patient créé',
             token,
-            patient: { id: result.insertId, email, firstName, lastName }
+            patient: { id: newUserId, email, firstName, lastName }
         });
     } catch (error) {
         console.error(error);

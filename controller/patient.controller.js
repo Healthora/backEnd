@@ -15,6 +15,7 @@ export const getAllPatient = async (req, res, next) => {
         let query = `
             SELECT 
                 p.*,
+                MAX(CASE WHEN pu.id IS NOT NULL THEN 1 ELSE 0 END) as is_app_user,
                 MAX(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as last_visit,
                 MIN(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as next_visit,
                 COUNT(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_past,
@@ -22,6 +23,7 @@ export const getAllPatient = async (req, res, next) => {
                 COUNT(CASE WHEN a.status IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as nrp_count
             FROM patients p
             LEFT JOIN appointments a ON a.patient_id = p.id
+            LEFT JOIN patient_users pu ON p.phone = pu.phone
             WHERE p.doctor_id = ?
         `;
         let queryParams = [doctorId];
