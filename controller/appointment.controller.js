@@ -24,11 +24,24 @@ export const createAppointment = async (req, res) => {
         const reqStatus = req.body.status;
         const finalStatus = (reqStatus && validStatuses.includes(reqStatus)) ? reqStatus : 'nouveau';
 
+        // Fix: Web-First Bug
+        // We need to check if the patient's phone exists in patient_users to link the appointment
+        const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
+        let patient_user_id = null;
+        
+        if (patientRows.length > 0 && patientRows[0].phone) {
+            const phone = patientRows[0].phone;
+            const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [phone]);
+            if (userRows.length > 0) {
+                patient_user_id = userRows[0].id;
+            }
+        }
+
         const [result] = await pool.query(
             `INSERT INTO appointments 
-            (doctor_id, patient_id, cabinet_id, appointment_date, status, visit_type, notes) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [doctor_id, patient_id, cabinet_id, appointment_date, finalStatus, visit_type, notes || '']
+            (doctor_id, patient_id, cabinet_id, appointment_date, status, visit_type, notes, patient_user_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [doctor_id, patient_id, cabinet_id, appointment_date, finalStatus, visit_type, notes || '', patient_user_id]
         );
 
         res.status(201).json({
@@ -38,7 +51,8 @@ export const createAppointment = async (req, res) => {
                 id: result.insertId,
                 ...req.body,
                 status: finalStatus,
-                notes: notes || ''
+                notes: notes || '',
+                patient_user_id
             }
         });
 

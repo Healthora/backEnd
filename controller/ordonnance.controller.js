@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, "../.env") });
+dotenv.config();
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -199,23 +199,18 @@ const uploadToCloudinary = (pdfBuffer) =>
 
 const extractPublicId = (url) => url.split("/").pop().split(".")[0];
 
-export const getOrdonnancesByPatientPhone = async (req, res) => {
+export const getOrdonnancesByPatientId = async (req, res) => {
   try {
-    const { patient_phone } = req.params;
+    const { patient_id } = req.params;
 
-    // We join the 'patients' table to match by phone globally
     const [rows] = await pool.query(
-      `SELECT pr.* 
-       FROM prescriptions pr
-       JOIN patients pt ON pr.patient_id = pt.id
-       WHERE pt.phone = ?
-       ORDER BY pr.created_at DESC`,
-      [patient_phone]
+      `SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC`,
+      [patient_id]
     );
 
     res.status(200).json({ success: true, data: rows });
   } catch (error) {
-    console.error("Get ordonnances by phone error:", error);
+    console.error("Get ordonnances by ID error:", error);
     res.status(500).json({ success: false, message: "Failed to retrieve ordonnances" });
   }
 };
@@ -293,7 +288,22 @@ export const createOrdonnance = async (req, res) => {
         message: "Rendez-vous introuvable ou non autorisé."
       });
     }
-    const patient_user_id = appointmentRows[0].patient_user_id;
+    let patient_user_id = appointmentRows[0].patient_user_id;
+
+    if (!patient_user_id) {
+      // Fix: Hidden Prescriptions Bug
+      // If the appointment didn't have the patient_user_id, try to find it via phone number
+      const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
+      if (patientRows.length > 0 && patientRows[0].phone) {
+        const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [patientRows[0].phone]);
+        if (userRows.length > 0) {
+          patient_user_id = userRows[0].id;
+          
+          // Also retroactively fix the appointment while we're here
+          await pool.query('UPDATE appointments SET patient_user_id = ? WHERE id = ?', [patient_user_id, appointment_id]);
+        }
+      }
+    }
 
     const [result] = await pool.query(
       `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url, medicaments, patient_user_id)
@@ -398,7 +408,7 @@ export const updateOrdonnance = async (req, res) => {
     const pdfBuffer = await generatePdfBuffer(html);
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
-    
+
     await pool.query(
       `UPDATE prescriptions SET cloudinary_url = ?, medicaments = ? WHERE id = ?`,
       [uploadResult.secure_url, JSON.stringify(medicaments), id]
