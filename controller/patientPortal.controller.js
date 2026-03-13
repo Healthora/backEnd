@@ -6,7 +6,7 @@ export const getDoctors = async (req, res) => {
         const { search, specialty } = req.query;
         let query = `
             SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone,
-                   c.name as cabinet_name, c.address as cabinet_address
+                   c.name as cabinet_name, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
             WHERE 1=1
@@ -95,8 +95,12 @@ export const bookAppointment = async (req, res) => {
 
         res.status(201).json({ success: true, message: 'Rendez-vous réservé', id: result.insertId });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la réservation' });
+        console.error('Error in bookAppointment:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Erreur lors de la réservation',
+            error: error.message // For debugging
+        });
     }
 };
 
