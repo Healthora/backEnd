@@ -105,10 +105,10 @@ export const updateProfilSetting = async (req, res, next) => {
 export const updateCabinetSetting = async (req, res, next) => {
     let connection;
     try {
-        const { cabinetName, cabinetAddress, schedule } = req.body;
+        const { cabinetName, wilaya, commune, cabinetAddress, schedule } = req.body;
         const doctorId = req.doctor.doctorId;
 
-        if (!cabinetName || !cabinetAddress) {
+        if (!cabinetName || !wilaya || !commune || !cabinetAddress) {
             return res.status(400).json({
                 success: false,
                 message: 'Veuillez remplir tous les champs obligatoires'
@@ -125,10 +125,12 @@ export const updateCabinetSetting = async (req, res, next) => {
         const [result] = await connection.query(`
             UPDATE cabinets
             SET name = ?,
+            wilaya = ?,
+            commune = ?,
             address = ?,
             schedule = ?
             WHERE doctor_id = ?
-        `, [cabinetName, cabinetAddress, JSON.stringify(schedule), doctorId]);
+        `, [cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule), doctorId]);
 
         let cabinetId;
         if (result.affectedRows > 0) {
@@ -136,8 +138,8 @@ export const updateCabinetSetting = async (req, res, next) => {
             cabinetId = updatedCabinet[0].id;
         } else {
             const [insertResult] = await connection.query(
-                'INSERT INTO cabinets (doctor_id, name, address, schedule) VALUES (?, ?, ?, ?)',
-                [doctorId, cabinetName, cabinetAddress, JSON.stringify(schedule)]
+                'INSERT INTO cabinets (doctor_id, name, wilaya, commune, address, schedule) VALUES (?, ?, ?, ?, ?, ?)',
+                [doctorId, cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule)]
             );
             cabinetId = insertResult.insertId;
         }
