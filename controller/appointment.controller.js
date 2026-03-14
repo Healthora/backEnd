@@ -348,7 +348,9 @@ export const getAvailableSlots = async (req, res) => {
             return res.status(400).json({ success: false, message: 'La date est requise' });
         }
 
-        const dateObj = new Date(date);
+        // Robust date parsing to avoid timezone shifts
+        const [year, month, day] = date.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day);
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayOfWeek = dayNames[dateObj.getDay()];
 
@@ -365,13 +367,14 @@ export const getAvailableSlots = async (req, res) => {
         // 2. Generate all possible time slots
         let allSlots = [];
         availabilities.forEach(avail => {
-            // Using time parts directly to avoid UTC/timezone issues
             const [startH, startM] = avail.start_time.split(':').map(Number);
             const [endH, endM] = avail.end_time.split(':').map(Number);
 
             let currentH = startH;
             let currentM = startM;
-            const duration = avail.slot_duration;
+            const duration = avail.slot_duration || 30; // Safety fallback
+
+            if (duration <= 0) return; // Prevent infinite loop
 
             while (currentH < endH || (currentH === endH && currentM < endM)) {
                 const hStr = currentH.toString().padStart(2, '0');
@@ -386,19 +389,31 @@ export const getAvailableSlots = async (req, res) => {
             }
         });
 
-        // 3. Get currently booked appointments for that date
+        // 3. Get currently booked appointments for that date with their durations
         const [bookedAppointments] = await pool.query(
-            `SELECT DATE_FORMAT(appointment_time, '%H:%i') as booked_time 
+            `SELECT 
+                DATE_FORMAT(appointment_time, '%H:%i') as start_time,
+                duration_minutes
              FROM appointments 
              WHERE doctor_id = ? AND appointment_date = ? 
              AND status NOT IN ('annule', 'absent') AND appointment_time IS NOT NULL`,
             [doctorId, date]
         );
 
-        const bookedTimes = bookedAppointments.map(app => app.booked_time);
+        // 4. Filter out slots that overlap with ANY part of a booked appointment
+        const availableSlots = allSlots.filter(slot => {
+            const [slotH, slotM] = slot.split(':').map(Number);
+            const slotTotalMinutes = slotH * 60 + slotM;
 
-        // 4. Filter out booked slots
-        const availableSlots = allSlots.filter(slot => !bookedTimes.includes(slot));
+            return !bookedAppointments.some(booked => {
+                const [bookedH, bookedM] = booked.start_time.split(':').map(Number);
+                const bookedStartTotal = bookedH * 60 + bookedM;
+                const bookedEndTotal = bookedStartTotal + (booked.duration_minutes || 30);
+
+                // A slot is blocked if it falls within [bookedStart, bookedEnd)
+                return slotTotalMinutes >= bookedStartTotal && slotTotalMinutes < bookedEndTotal;
+            });
+        });
 
         res.status(200).json({
             success: true,

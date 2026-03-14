@@ -11,7 +11,9 @@ import {
     getMyPrescriptions,
     updateMyProfile,
     getMyProfile,
-    cancelAppointment
+    cancelAppointment,
+    deleteAppointment,
+    getDoctorAvailableSlots
 } from "../controller/patientPortal.controller.js";
 import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
@@ -24,11 +26,13 @@ portalRouter.post('/auth/signin', patientSignIn);
 // Search Public
 portalRouter.get('/doctors', getDoctors);
 portalRouter.get('/doctors/:id', getDoctorDetails);
+portalRouter.get('/appointments/slots', getDoctorAvailableSlots);
 
 // Patient Private
 portalRouter.post('/appointments', verifyPatientToken, bookAppointment);
 portalRouter.get('/appointments/me', verifyPatientToken, getMyAppointments);
 portalRouter.post('/appointments/:id/cancel', verifyPatientToken, cancelAppointment);
+portalRouter.delete('/appointments/:id', verifyPatientToken, deleteAppointment);
 portalRouter.get('/prescriptions/me', verifyPatientToken, getMyPrescriptions);
 
 // Profile
