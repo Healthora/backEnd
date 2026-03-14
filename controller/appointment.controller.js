@@ -107,7 +107,7 @@ export const getAppointments = async (req, res) => {
             FROM appointments a
             JOIN patients p ON a.patient_id = p.id
             WHERE a.doctor_id = ?
-            ORDER BY a.appointment_date DESC, a.created_at DESC`,
+            ORDER BY a.appointment_date DESC, a.appointment_time ASC, a.created_at DESC`,
             [doctorId]
         );
 
@@ -196,17 +196,17 @@ export const updateAppointment = async (req, res) => {
         }
         if (appointment_time !== undefined) {
             updates.push('appointment_time = ?');
-            values.push(appointment_time);
+            values.push(appointment_time || null);
         }
         if (duration_minutes !== undefined) {
             updates.push('duration_minutes = ?');
-            values.push(duration_minutes);
+            values.push(duration_minutes || null);
         }
         if (visit_type) {
             updates.push('visit_type = ?');
             values.push(visit_type);
         }
-        
+
         if (status) {
             const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine', 'annule'];
             if (!validStatuses.includes(status)) {
@@ -320,7 +320,7 @@ export const getAppointmentsByPatient = async (req, res) => {
                 created_at
             FROM appointments 
             WHERE patient_id = ? AND doctor_id = ?
-            ORDER BY appointment_date DESC, created_at DESC`,
+            ORDER BY appointment_date DESC, appointment_time ASC, created_at DESC`,
             [patientId, req.doctor.doctorId]
         );
 
@@ -368,7 +368,7 @@ export const getAvailableSlots = async (req, res) => {
             // Using time parts directly to avoid UTC/timezone issues
             const [startH, startM] = avail.start_time.split(':').map(Number);
             const [endH, endM] = avail.end_time.split(':').map(Number);
-            
+
             let currentH = startH;
             let currentM = startM;
             const duration = avail.slot_duration;

@@ -117,7 +117,7 @@ export const getMyAppointments = async (req, res) => {
              JOIN doctors d ON a.doctor_id = d.id
              LEFT JOIN cabinets c ON a.cabinet_id = c.id
              WHERE a.patient_user_id = ?
-             ORDER BY a.appointment_date DESC`,
+             ORDER BY a.appointment_date DESC, a.appointment_time ASC`,
             [req.patient.id]
         );
         res.status(200).json({ success: true, data: appointments });
@@ -191,12 +191,12 @@ export const updateMyProfile = async (req, res) => {
         const values = [];
 
         if (firstName !== undefined) { fields.push('first_name = ?'); values.push(firstName.trim()); }
-        if (lastName !== undefined)  { fields.push('last_name = ?');  values.push(lastName.trim()); }
-        if (phone !== undefined)     { fields.push('phone = ?');      values.push(phone.trim()); }
-        if (address !== undefined)   { fields.push('address = ?');    values.push(address); }
+        if (lastName !== undefined) { fields.push('last_name = ?'); values.push(lastName.trim()); }
+        if (phone !== undefined) { fields.push('phone = ?'); values.push(phone.trim()); }
+        if (address !== undefined) { fields.push('address = ?'); values.push(address); }
         if (birthDate !== undefined) { fields.push('birth_date = ?'); values.push(birthDate); }
-        if (gender !== undefined)    { fields.push('gender = ?');     values.push(gender); }
-        if (bio !== undefined)       { fields.push('bio = ?');        values.push(bio); }
+        if (gender !== undefined) { fields.push('gender = ?'); values.push(gender); }
+        if (bio !== undefined) { fields.push('bio = ?'); values.push(bio); }
 
         if (fields.length === 0) {
             return res.status(400).json({ success: false, message: 'Aucune donnée à mettre à jour' });
