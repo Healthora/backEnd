@@ -23,6 +23,7 @@ const portalRouter = Router();
 portalRouter.post('/auth/signup', patientSignUp);
 portalRouter.post('/auth/signin', patientSignIn);
 
+
 // Search Public
 portalRouter.get('/doctors', getDoctors);
 portalRouter.get('/doctors/:id', getDoctorDetails);

@@ -6,7 +6,7 @@ export const getDoctors = async (req, res) => {
         const { search, specialty, wilaya, commune } = req.query;
         let query = `
             SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online,
-                   c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address
+                   c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
             WHERE 1=1
@@ -117,8 +117,12 @@ export const bookAppointment = async (req, res) => {
 
         res.status(201).json({ success: true, message: 'Rendez-vous réservé', id: result.insertId });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la réservation' });
+        console.error('Error in bookAppointment:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la réservation',
+            error: error.message // For debugging
+        });
     }
 };
 
@@ -284,15 +288,17 @@ export const updateMyProfile = async (req, res) => {
     }
 };
 
-// Cancel an appointment
+// Cancel an appointment (change status to 'annule')
 export const cancelAppointment = async (req, res) => {
     try {
         const { id } = req.params;
         const patient_user_id = req.patient.id;
 
+        console.log(`Attempting to cancel appointment ${id} for patient ${patient_user_id}`);
+
         // Check if appointment belongs to this patient
         const [appointments] = await pool.query(
-            "SELECT id FROM appointments WHERE id = ? AND patient_user_id = ?",
+            "SELECT id, status FROM appointments WHERE id = ? AND patient_user_id = ?",
             [id, patient_user_id]
         );
 
@@ -300,11 +306,19 @@ export const cancelAppointment = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Rendez-vous introuvable ou non autorisé' });
         }
 
+        if (appointments[0].status === 'annule') {
+            return res.status(400).json({ success: false, message: 'Rendez-vous déjà annulé' });
+        }
+
         // Update status to 'annule'
-        await pool.query(
-            "UPDATE appointments SET status = 'annule' WHERE id = ?",
-            [id]
+        const [result] = await pool.query(
+            "UPDATE appointments SET status = 'annule' WHERE id = ? AND patient_user_id = ?",
+            [id, patient_user_id]
         );
+
+        if (result.affectedRows === 0) {
+            return res.status(500).json({ success: false, message: 'Échec de la mise à jour' });
+        }
 
         res.status(200).json({ success: true, message: 'Rendez-vous annulé' });
     } catch (error) {
@@ -312,6 +326,7 @@ export const cancelAppointment = async (req, res) => {
         res.status(500).json({ success: false, message: 'Erreur serveur lors de l\'annulation' });
     }
 };
+
 
 // Get available slots for a specific doctor and date
 export const getDoctorAvailableSlots = async (req, res) => {
