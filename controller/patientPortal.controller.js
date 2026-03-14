@@ -5,7 +5,7 @@ export const getDoctors = async (req, res) => {
     try {
         const { search, specialty } = req.query;
         let query = `
-            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone,
+            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio,
                    c.name as cabinet_name, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
@@ -34,7 +34,7 @@ export const getDoctorDetails = async (req, res) => {
     try {
         const { id } = req.params;
         const [doctors] = await pool.query(
-            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, c.name as cabinet_name, c.address as cabinet_address, c.schedule, c.id as cabinet_id
+            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, c.name as cabinet_name, c.address as cabinet_address, c.schedule, c.id as cabinet_id
              FROM doctors d
              LEFT JOIN cabinets c ON d.id = c.doctor_id
              WHERE d.id = ?`,
@@ -100,8 +100,8 @@ export const bookAppointment = async (req, res) => {
         res.status(201).json({ success: true, message: 'Rendez-vous réservé', id: result.insertId });
     } catch (error) {
         console.error('Error in bookAppointment:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Erreur lors de la réservation',
             error: error.message // For debugging
         });
