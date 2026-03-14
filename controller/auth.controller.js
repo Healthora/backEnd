@@ -15,12 +15,14 @@ export const signUp = async (req, res, next) => {
             phone,
             specialty,
             cabinetName,
+            wilaya,
+            commune,
             cabinetAddress,
             schedule
         } = req.body;
 
         // Validation des champs requis
-        if (!firstName || !lastName || !email || !password || !phone || !cabinetName || !cabinetAddress) {
+        if (!firstName || !lastName || !email || !password || !phone || !cabinetName || !wilaya || !commune || !cabinetAddress) {
             return res.status(400).json({
                 success: false,
                 message: 'Tous les champs obligatoires doivent être remplis'
@@ -85,8 +87,8 @@ export const signUp = async (req, res, next) => {
 
         // Créer le cabinet avec le planning
         await connection.query(
-            `INSERT INTO cabinets (doctor_id, name, address, schedule) VALUES (?, ?, ?, ?)`,
-            [doctorId, cabinetName, cabinetAddress, JSON.stringify(schedule || defaultSchedule)]
+            `INSERT INTO cabinets (doctor_id, name, wilaya, commune, address, schedule) VALUES (?, ?, ?, ?, ?, ?)`,
+            [doctorId, cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule || defaultSchedule)]
         );
 
         await connection.commit();
@@ -112,6 +114,8 @@ export const signUp = async (req, res, next) => {
                 phone: phone,
                 specialty: specialty,
                 cabinetName: cabinetName,
+                wilaya: wilaya,
+                commune: commune,
                 cabinetAddress: cabinetAddress,
                 schedule: schedule || defaultSchedule,
                 token: token
@@ -154,10 +158,13 @@ export const signIn = async (req, res, next) => {
                 d.last_name,
                 d.phone,
                 d.specialty,
+                d.bio,
                 d.is_reservation_online,
                 d.consultation_duration,
                 d.created_at,
                 c.name as cabinet_name,
+                c.wilaya,
+                c.commune,
                 c.address as cabinet_address,
                 c.id as cabinet_id,
                 c.schedule as cabinet_schedule
@@ -206,6 +213,7 @@ export const signIn = async (req, res, next) => {
                 lastName: doctor.last_name,
                 phone: doctor.phone,
                 specialty: doctor.specialty,
+                bio: doctor.bio,
                 cabinetName: doctor.cabinet_name,
                 cabinetAddress: doctor.cabinet_address,
                 cabinetId: doctor.cabinet_id,
@@ -260,11 +268,14 @@ export const getCurrentDoctor = async (req, res, next) => {
                 d.last_name,
                 d.phone,
                 d.specialty,
+                d.bio,
                 d.is_reservation_online,
                 d.consultation_duration,
                 d.created_at,
                 d.updated_at,
                 c.name as cabinet_name,
+                c.wilaya,
+                c.commune,
                 c.address as cabinet_address,
                 c.id as cabinet_id,
                 c.schedule as cabinet_schedule
@@ -292,9 +303,12 @@ export const getCurrentDoctor = async (req, res, next) => {
                 lastName: doctor.last_name,
                 phone: doctor.phone,
                 specialty: doctor.specialty,
+                bio: doctor.bio,
                 createdAt: doctor.created_at,
                 updatedAt: doctor.updated_at,
                 cabinetName: doctor.cabinet_name,
+                wilaya: doctor.wilaya,
+                commune: doctor.commune,
                 cabinetAddress: doctor.cabinet_address,
                 cabinetId: doctor.cabinet_id,
                 onlineBooking: doctor.is_reservation_online === 1,
