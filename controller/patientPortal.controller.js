@@ -3,10 +3,10 @@ import pool from '../database.js';
 // Search and list doctors
 export const getDoctors = async (req, res) => {
     try {
-        const { search, specialty } = req.query;
+        const { search, specialty, wilaya, commune } = req.query;
         let query = `
-            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio,
-                   c.name as cabinet_name, c.address as cabinet_address, c.id as cabinet_id
+            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online,
+                   c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
             WHERE 1=1
@@ -14,12 +14,20 @@ export const getDoctors = async (req, res) => {
         const params = [];
 
         if (search) {
-            query += ` AND (d.first_name LIKE ? OR d.last_name LIKE ? OR d.specialty LIKE ?)`;
-            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+            query += ` AND (d.first_name LIKE ? OR d.last_name LIKE ? OR d.specialty LIKE ? OR c.name LIKE ?)`;
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
         }
         if (specialty) {
             query += ` AND d.specialty = ?`;
             params.push(specialty);
+        }
+        if (wilaya) {
+            query += ` AND c.wilaya = ?`;
+            params.push(wilaya);
+        }
+        if (commune) {
+            query += ` AND c.commune = ?`;
+            params.push(commune);
         }
 
         const [doctors] = await pool.query(query, params);
@@ -34,7 +42,8 @@ export const getDoctorDetails = async (req, res) => {
     try {
         const { id } = req.params;
         const [doctors] = await pool.query(
-            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, c.name as cabinet_name, c.address as cabinet_address, c.schedule, c.id as cabinet_id
+            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online,
+                    c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.schedule, c.id as cabinet_id
              FROM doctors d
              LEFT JOIN cabinets c ON d.id = c.doctor_id
              WHERE d.id = ?`,
@@ -62,9 +71,18 @@ export const bookAppointment = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Données manquantes: doctor_id, cabinet_id et appointment_date sont obligatoires' });
         }
 
-        // Fetch doctor's consultation duration for duration_minutes
-        const [doctorRows] = await pool.query('SELECT consultation_duration FROM doctors WHERE id = ?', [doctor_id]);
-        const duration_minutes = doctorRows.length > 0 ? doctorRows[0].consultation_duration : 30;
+        // Fetch doctor's settings
+        const [doctorRows] = await pool.query('SELECT consultation_duration, is_reservation_online FROM doctors WHERE id = ?', [doctor_id]);
+        
+        if (doctorRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Médecin introuvable' });
+        }
+
+        if (!doctorRows[0].is_reservation_online) {
+            return res.status(403).json({ success: false, message: 'Ce médecin n\'accepte pas les réservations en ligne pour le moment' });
+        }
+
+        const duration_minutes = doctorRows[0].consultation_duration || 30;
 
         // We also need a 'patient_id' record in the doctor's private patient table if it doesn't exist?
         // Let's check if there's already a linked private patient record.
@@ -116,7 +134,7 @@ export const getMyAppointments = async (req, res) => {
                     DATE_FORMAT(a.appointment_date, '%Y-%m-%d') as appointment_date,
                     DATE_FORMAT(a.appointment_time, '%H:%i') as appointment_time,
                     d.first_name as doc_first, d.last_name as doc_last, d.specialty,
-                    c.name as cabinet_name, c.address as cabinet_address
+                    c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address
              FROM appointments a
              JOIN doctors d ON a.doctor_id = d.id
              LEFT JOIN cabinets c ON a.cabinet_id = c.id
@@ -219,6 +237,36 @@ export const updateMyProfile = async (req, res) => {
             [req.patient.id]
         );
         const u = updated[0];
+
+        // SYNC LOGIC: Propagate changes to the doctor's shadow 'patients' table
+        // This ensures the doctor's Web Dashboard reflects the new contact info
+        try {
+            const patientFields = [];
+            const patientValues = [];
+            if (firstName !== undefined) { patientFields.push('first_name = ?'); patientValues.push(firstName.trim()); }
+            if (lastName !== undefined) { patientFields.push('last_name = ?'); patientValues.push(lastName.trim()); }
+            if (address !== undefined) { patientFields.push('address = ?'); patientValues.push(address); }
+            if (birthDate !== undefined) { patientFields.push('birth_date = ?'); patientValues.push(birthDate); }
+            if (gender !== undefined) { patientFields.push('gender = ?'); patientValues.push(gender); }
+
+            if (patientFields.length > 0) {
+                patientValues.push(req.patient.phone); // Link via the OLD phone number that the doctor has
+                await pool.query(
+                    `UPDATE patients SET ${patientFields.join(', ')} WHERE phone = ?`,
+                    patientValues
+                );
+            }
+            
+            // If phone itself changed, we need a special update to avoid breaking links
+            if (phone !== undefined && phone.trim() !== req.patient.phone) {
+                await pool.query('UPDATE patients SET phone = ? WHERE phone = ?', [phone.trim(), req.patient.phone]);
+            }
+        } catch (syncError) {
+            console.error('Non-critical sync error:', syncError);
+            // We don't fail the whole request if the doctor sync fails, 
+            // but we log it for the senior developer to investigate.
+        }
+
         res.status(200).json({
             success: true,
             message: 'Profil mis à jour',
@@ -279,7 +327,100 @@ export const cancelAppointment = async (req, res) => {
     }
 };
 
-// Permanently remove an appointment
+
+// Get available slots for a specific doctor and date
+export const getDoctorAvailableSlots = async (req, res) => {
+    try {
+        const { doctorId, date } = req.query; // Format YYYY-MM-DD
+
+        if (!doctorId || !date) {
+            return res.status(400).json({ success: false, message: 'Doctor ID et date sont requis' });
+        }
+
+        // Robust date parsing to avoid timezone shifts
+        const [year, month, day] = date.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day);
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayOfWeek = dayNames[dateObj.getDay()];
+
+        // 0. Check if doctor allows online reservations
+        const [doctorRows] = await pool.query('SELECT is_reservation_online FROM doctors WHERE id = ?', [doctorId]);
+        if (doctorRows.length === 0 || !doctorRows[0].is_reservation_online) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // 1. Get availabilities for this day
+        const [availabilities] = await pool.query(
+            'SELECT start_time, end_time, slot_duration FROM availabilities WHERE doctor_id = ? AND day_of_week = ?',
+            [doctorId, dayOfWeek]
+        );
+
+        if (availabilities.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // 2. Generate all possible time slots
+        let allSlots = [];
+        availabilities.forEach(avail => {
+            const [startH, startM] = avail.start_time.split(':').map(Number);
+            const [endH, endM] = avail.end_time.split(':').map(Number);
+
+            let currentH = startH;
+            let currentM = startM;
+            const duration = avail.slot_duration || 30;
+
+            if (duration <= 0) return; // Safety check
+
+            while (currentH < endH || (currentH === endH && currentM < endM)) {
+                const hStr = currentH.toString().padStart(2, '0');
+                const mStr = currentM.toString().padStart(2, '0');
+                allSlots.push(`${hStr}:${mStr}`);
+
+                currentM += duration;
+                if (currentM >= 60) {
+                    currentH += Math.floor(currentM / 60);
+                    currentM = currentM % 60;
+                }
+            }
+        });
+
+        // 3. Get currently booked appointments for that date with their durations
+        const [bookedAppointments] = await pool.query(
+            `SELECT 
+                DATE_FORMAT(appointment_time, '%H:%i') as start_time,
+                duration_minutes
+             FROM appointments 
+             WHERE doctor_id = ? AND appointment_date = ? 
+             AND status NOT IN ('annule', 'absent') AND appointment_time IS NOT NULL`,
+            [doctorId, date]
+        );
+
+        // 4. Filter out overlapping slots
+        const availableSlots = allSlots.filter(slot => {
+            const [slotH, slotM] = slot.split(':').map(Number);
+            const slotTotalMinutes = slotH * 60 + slotM;
+
+            return !bookedAppointments.some(booked => {
+                const [bookedH, bookedM] = booked.start_time.split(':').map(Number);
+                const bookedStartTotal = bookedH * 60 + bookedM;
+                const bookedEndTotal = bookedStartTotal + (booked.duration_minutes || 30);
+
+                return slotTotalMinutes >= bookedStartTotal && slotTotalMinutes < bookedEndTotal;
+            });
+        });
+
+        res.status(200).json({
+            success: true,
+            data: availableSlots
+        });
+
+    } catch (error) {
+        console.error('Erreur fetching available slots:', error);
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+};
+
+// Remove an appointment (Patient's side)
 export const deleteAppointment = async (req, res) => {
     try {
         const { id } = req.params;
@@ -294,7 +435,7 @@ export const deleteAppointment = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Rendez-vous introuvable ou non autorisé' });
         }
 
-        res.status(200).json({ success: true, message: 'Rendez-vous supprimé' });
+        res.status(200).json({ success: true, message: 'Rendez-vous supprimé de l\'historique' });
     } catch (error) {
         console.error('Error deleting appointment:', error);
         res.status(500).json({ success: false, message: 'Erreur serveur lors de la suppression' });
