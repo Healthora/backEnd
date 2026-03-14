@@ -192,6 +192,7 @@ export const updateAppointment = async (req, res) => {
             updates.push('visit_type = ?');
             values.push(visit_type);
         }
+        
         if (status) {
             const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine', 'annule'];
             if (!validStatuses.includes(status)) {
