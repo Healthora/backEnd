@@ -202,10 +202,11 @@ const extractPublicId = (url) => url.split("/").pop().split(".")[0];
 export const getOrdonnancesByPatientId = async (req, res) => {
   try {
     const { patient_id } = req.params;
+    const doctor_id = req.doctor.doctorId;
 
     const [rows] = await pool.query(
-      `SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC`,
-      [patient_id]
+      `SELECT * FROM prescriptions WHERE patient_id = ? AND doctor_id = ? ORDER BY created_at DESC`,
+      [patient_id, doctor_id]
     );
 
     res.status(200).json({ success: true, data: rows });

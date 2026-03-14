@@ -6,6 +6,8 @@ export const createAppointment = async (req, res) => {
             patient_id,
             cabinet_id,
             appointment_date,
+            appointment_time,
+            duration_minutes,
             visit_type,
             notes
         } = req.body;
@@ -39,9 +41,9 @@ export const createAppointment = async (req, res) => {
 
         const [result] = await pool.query(
             `INSERT INTO appointments 
-            (doctor_id, patient_id, cabinet_id, appointment_date, status, visit_type, notes, patient_user_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [doctor_id, patient_id, cabinet_id, appointment_date, finalStatus, visit_type, notes || '', patient_user_id]
+            (doctor_id, patient_id, cabinet_id, appointment_date, appointment_time, duration_minutes, status, visit_type, notes, patient_user_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [doctor_id, patient_id, cabinet_id, appointment_date, appointment_time || null, duration_minutes || null, finalStatus, visit_type, notes || '', patient_user_id]
         );
 
         res.status(201).json({
@@ -91,6 +93,8 @@ export const getAppointments = async (req, res) => {
                 a.patient_id,
                 a.cabinet_id,
                 DATE_FORMAT(a.appointment_date, '%Y-%m-%d') as appointment_date,
+                DATE_FORMAT(a.appointment_time, '%H:%i') as appointment_time,
+                a.duration_minutes,
                 a.status,
                 a.visit_type,
                 a.notes,
@@ -167,6 +171,8 @@ export const updateAppointment = async (req, res) => {
         const { id } = req.params;
         const {
             appointment_date,
+            appointment_time,
+            duration_minutes,
             visit_type,
             status,
             notes
@@ -188,6 +194,14 @@ export const updateAppointment = async (req, res) => {
             updates.push('appointment_date = ?');
             values.push(appointment_date);
         }
+        if (appointment_time !== undefined) {
+            updates.push('appointment_time = ?');
+            values.push(appointment_time);
+        }
+        if (duration_minutes !== undefined) {
+            updates.push('duration_minutes = ?');
+            values.push(duration_minutes);
+        }
         if (visit_type) {
             updates.push('visit_type = ?');
             values.push(visit_type);
@@ -207,6 +221,18 @@ export const updateAppointment = async (req, res) => {
         if (notes !== undefined) {
             updates.push('notes = ?');
             values.push(notes);
+        }
+
+        // Retroactive fix: Check if patient_user_id needs syncing
+        if (!existing[0].patient_user_id) {
+            const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [existing[0].patient_id]);
+            if (patientRows.length > 0 && patientRows[0].phone) {
+                const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [patientRows[0].phone]);
+                if (userRows.length > 0) {
+                    updates.push('patient_user_id = ?');
+                    values.push(userRows[0].id);
+                }
+            }
         }
 
         if (updates.length === 0) {
@@ -287,6 +313,7 @@ export const getAppointmentsByPatient = async (req, res) => {
                 patient_id,
                 cabinet_id,
                 DATE_FORMAT(appointment_date, '%Y-%m-%d') as appointment_date,
+                DATE_FORMAT(appointment_time, '%H:%i') as appointment_time,
                 status,
                 visit_type,
                 notes,
@@ -307,6 +334,82 @@ export const getAppointmentsByPatient = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la récupération des rendez-vous',
+            error: error.message
+        });
+    }
+};
+
+export const getAvailableSlots = async (req, res) => {
+    try {
+        const { date } = req.query; // Format YYYY-MM-DD
+        const doctorId = req.doctor.doctorId;
+
+        if (!date) {
+            return res.status(400).json({ success: false, message: 'La date est requise' });
+        }
+
+        const dateObj = new Date(date);
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayOfWeek = dayNames[dateObj.getDay()];
+
+        // 1. Get availabilities for this day
+        const [availabilities] = await pool.query(
+            'SELECT start_time, end_time, slot_duration FROM availabilities WHERE doctor_id = ? AND day_of_week = ?',
+            [doctorId, dayOfWeek]
+        );
+
+        if (availabilities.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // 2. Generate all possible time slots
+        let allSlots = [];
+        availabilities.forEach(avail => {
+            // Using time parts directly to avoid UTC/timezone issues
+            const [startH, startM] = avail.start_time.split(':').map(Number);
+            const [endH, endM] = avail.end_time.split(':').map(Number);
+            
+            let currentH = startH;
+            let currentM = startM;
+            const duration = avail.slot_duration;
+
+            while (currentH < endH || (currentH === endH && currentM < endM)) {
+                const hStr = currentH.toString().padStart(2, '0');
+                const mStr = currentM.toString().padStart(2, '0');
+                allSlots.push(`${hStr}:${mStr}`);
+
+                currentM += duration;
+                if (currentM >= 60) {
+                    currentH += Math.floor(currentM / 60);
+                    currentM = currentM % 60;
+                }
+            }
+        });
+
+        // 3. Get currently booked appointments for that date
+        const [bookedAppointments] = await pool.query(
+            `SELECT DATE_FORMAT(appointment_time, '%H:%i') as booked_time 
+             FROM appointments 
+             WHERE doctor_id = ? AND appointment_date = ? 
+             AND status NOT IN ('annule', 'absent') AND appointment_time IS NOT NULL`,
+            [doctorId, date]
+        );
+
+        const bookedTimes = bookedAppointments.map(app => app.booked_time);
+
+        // 4. Filter out booked slots
+        const availableSlots = allSlots.filter(slot => !bookedTimes.includes(slot));
+
+        res.status(200).json({
+            success: true,
+            data: availableSlots
+        });
+
+    } catch (error) {
+        console.error('Erreur lors de la recherche de disponibilités:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur',
             error: error.message
         });
     }
