@@ -1,34 +1,53 @@
 import pool from '../database.js';
 
 const syncAvailabilities = async (connection, doctorId, cabinetId, schedule, slotDuration) => {
-    // 1. Delete all old availabilities for this cabinet
-    await connection.query('DELETE FROM availabilities WHERE cabinet_id = ?', [cabinetId]);
-    
-    // 2. Parse the schedule and insert new ones
-    if (schedule) {
+    try {
+        // 1. Delete all old availabilities for this cabinet
+        await connection.query('DELETE FROM availabilities WHERE cabinet_id = ?', [cabinetId]);
+        
+        if (!schedule) return;
+
         const dayMap = {
             monday: 'monday', tuesday: 'tuesday', wednesday: 'wednesday',
             thursday: 'thursday', friday: 'friday', saturday: 'saturday', sunday: 'sunday'
         };
+
+        // Helper to ensure HH:mm:ss format
+        const formatTime = (timeStr) => {
+            if (!timeStr) return null;
+            let [h, m] = timeStr.split(':');
+            h = h.padStart(2, '0');
+            m = (m || '00').padEnd(2, '0');
+            return `${h}:${m}:00`;
+        };
         
         for (const [day, dayData] of Object.entries(schedule)) {
-            if (dayData.isOpen && dayData.slots && dayData.slots.length > 0) {
-                for (const slot of dayData.slots) {
-                    if (slot.start && slot.end) {
-                         let startTime = slot.start.length === 5 ? slot.start + ':00' : slot.start;
-                         let endTime = slot.end.length === 5 ? slot.end + ':00' : slot.end;
-                         
-                         await connection.query(`
-                            INSERT INTO availabilities (doctor_id, cabinet_id, day_of_week, start_time, end_time, slot_duration)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                         `, [doctorId, cabinetId, dayMap[day], startTime, endTime, slotDuration]);
-                    }
+            const backendDay = dayMap[day.toLowerCase()];
+            if (!backendDay || !dayData.isOpen) continue;
+
+            const slots = dayData.slots || [];
+            
+            // Handle legacy structure (start/end on root) or new structure (slots array)
+            const normalizedSlots = slots.length > 0 ? slots : 
+                                  (dayData.start && dayData.end ? [{start: dayData.start, end: dayData.end}] : []);
+
+            for (const slot of normalizedSlots) {
+                if (slot.start && slot.end) {
+                     const startTime = formatTime(slot.start);
+                     const endTime = formatTime(slot.end);
+                     
+                     await connection.query(`
+                        INSERT INTO availabilities (doctor_id, cabinet_id, day_of_week, start_time, end_time, slot_duration)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                     `, [doctorId, cabinetId, backendDay, startTime, endTime, slotDuration || 30]);
                 }
             }
         }
+    } catch (error) {
+        console.error('Error in syncAvailabilities:', error);
+        throw error; // Re-throw to trigger transaction rollback
     }
 };
-
 
 export const updateProfilSetting = async (req, res, next) => {
     try {
@@ -39,66 +58,23 @@ export const updateProfilSetting = async (req, res, next) => {
             return res.status(400).json({
                 success: false,
                 message: 'Veuillez remplir tous les champs obligatoires'
-            })
-        };
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                message: 'email invalide'
-            });
-        }
-
-        const [existingUser] = await pool.query(
-            'SELECT id FROM doctors WHERE email = ? AND id != ?',
-            [email, doctorId]
-        );
-
-        if (existingUser.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email déjà utilisé par un autre médecin'
             });
         }
 
         const [result] = await pool.query(`
             UPDATE doctors
-            SET email = ?,
-            first_name = ?,
-            last_name = ?,
-            phone = ?,
-            specialty = ?,
-            bio = ?
+            SET email = ?, first_name = ?, last_name = ?, phone = ?, specialty = ?, bio = ?
             WHERE id = ?
         `, [email, firstName, lastName, phone, specialty, bio || '', doctorId]);
-
-        const [updatedUser] = await pool.query(
-            'SELECT id, email, first_name, last_name, phone, specialty, bio, is_reservation_online, consultation_duration FROM doctors WHERE id = ?',
-            [doctorId]
-        );
 
         res.status(200).json({
             success: true,
             message: 'Profil mis à jour avec succès',
-            data: {
-                doctorId: updatedUser[0].id,
-                email: updatedUser[0].email,
-                firstName: updatedUser[0].first_name,
-                lastName: updatedUser[0].last_name,
-                phone: updatedUser[0].phone,
-                specialty: updatedUser[0].specialty,
-                bio: updatedUser[0].bio,
-                onlineBooking: updatedUser[0].is_reservation_online === 1,
-                consultationDuration: updatedUser[0].consultation_duration
-            }
+            data: { email, firstName, lastName, phone, specialty, bio }
         });
     } catch (error) {
         console.error('Update profile error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur lors de la mise à jour des informations'
-        });
+        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour' });
     }
 }
 
@@ -118,24 +94,21 @@ export const updateCabinetSetting = async (req, res, next) => {
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        // Get current consultation duration
+        // 1. Get current doctor settings for slot duration
         const [doctorData] = await connection.query('SELECT consultation_duration FROM doctors WHERE id = ?', [doctorId]);
         const slotDuration = doctorData[0]?.consultation_duration || 30;
 
-        const [result] = await connection.query(`
-            UPDATE cabinets
-            SET name = ?,
-            wilaya = ?,
-            commune = ?,
-            address = ?,
-            schedule = ?
-            WHERE doctor_id = ?
-        `, [cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule), doctorId]);
-
+        // 2. Check if cabinet exists
+        const [existingCabinets] = await connection.query('SELECT id FROM cabinets WHERE doctor_id = ?', [doctorId]);
         let cabinetId;
-        if (result.affectedRows > 0) {
-            const [updatedCabinet] = await connection.query('SELECT id FROM cabinets WHERE doctor_id = ?', [doctorId]);
-            cabinetId = updatedCabinet[0].id;
+
+        if (existingCabinets.length > 0) {
+            cabinetId = existingCabinets[0].id;
+            await connection.query(`
+                UPDATE cabinets
+                SET name = ?, wilaya = ?, commune = ?, address = ?, schedule = ?
+                WHERE id = ?
+            `, [cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule), cabinetId]);
         } else {
             const [insertResult] = await connection.query(
                 'INSERT INTO cabinets (doctor_id, name, wilaya, commune, address, schedule) VALUES (?, ?, ?, ?, ?, ?)',
@@ -144,19 +117,20 @@ export const updateCabinetSetting = async (req, res, next) => {
             cabinetId = insertResult.insertId;
         }
         
+        // 3. Sync availabilities table
         await syncAvailabilities(connection, doctorId, cabinetId, schedule, slotDuration);
         
         await connection.commit();
         
         res.status(200).json({
             success: true,
-            message: 'Cabinet mis à jour avec succès',
+            message: 'Cabinet et disponibilités mis à jour avec succès',
             data: { cabinetName, cabinetAddress, schedule, consultationDuration: slotDuration }
         });
     } catch (error) {
         if (connection) await connection.rollback();
         console.error('Update cabinet error:', error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour' });
+        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour du cabinet' });
     } finally {
         if (connection) connection.release();
     }
