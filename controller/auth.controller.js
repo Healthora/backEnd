@@ -154,6 +154,8 @@ export const signIn = async (req, res, next) => {
                 d.last_name,
                 d.phone,
                 d.specialty,
+                d.is_reservation_online,
+                d.consultation_duration,
                 d.created_at,
                 c.name as cabinet_name,
                 c.address as cabinet_address,
@@ -207,6 +209,8 @@ export const signIn = async (req, res, next) => {
                 cabinetName: doctor.cabinet_name,
                 cabinetAddress: doctor.cabinet_address,
                 cabinetId: doctor.cabinet_id,
+                onlineBooking: doctor.is_reservation_online === 1,
+                consultationDuration: doctor.consultation_duration || 30,
                 schedule: typeof doctor.cabinet_schedule === 'string'
                     ? JSON.parse(doctor.cabinet_schedule)
                     : doctor.cabinet_schedule,
@@ -256,6 +260,8 @@ export const getCurrentDoctor = async (req, res, next) => {
                 d.last_name,
                 d.phone,
                 d.specialty,
+                d.is_reservation_online,
+                d.consultation_duration,
                 d.created_at,
                 d.updated_at,
                 c.name as cabinet_name,
@@ -291,6 +297,8 @@ export const getCurrentDoctor = async (req, res, next) => {
                 cabinetName: doctor.cabinet_name,
                 cabinetAddress: doctor.cabinet_address,
                 cabinetId: doctor.cabinet_id,
+                onlineBooking: doctor.is_reservation_online === 1,
+                consultationDuration: doctor.consultation_duration || 30,
                 schedule: typeof doctor.cabinet_schedule === 'string'
                     ? JSON.parse(doctor.cabinet_schedule)
                     : doctor.cabinet_schedule
