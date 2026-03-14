@@ -55,12 +55,16 @@ export const getDoctorDetails = async (req, res) => {
 // Patient books an appointment
 export const bookAppointment = async (req, res) => {
     try {
-        const { doctor_id, cabinet_id, appointment_date, visit_type, notes } = req.body;
+        const { doctor_id, cabinet_id, appointment_date, appointment_time, visit_type, notes } = req.body;
         const patient_user_id = req.patient.id;
 
         if (!doctor_id || !cabinet_id || !appointment_date) {
             return res.status(400).json({ success: false, message: 'Données manquantes: doctor_id, cabinet_id et appointment_date sont obligatoires' });
         }
+
+        // Fetch doctor's consultation duration for duration_minutes
+        const [doctorRows] = await pool.query('SELECT consultation_duration FROM doctors WHERE id = ?', [doctor_id]);
+        const duration_minutes = doctorRows.length > 0 ? doctorRows[0].consultation_duration : 30;
 
         // We also need a 'patient_id' record in the doctor's private patient table if it doesn't exist?
         // Let's check if there's already a linked private patient record.
@@ -88,9 +92,9 @@ export const bookAppointment = async (req, res) => {
         }
 
         const [result] = await pool.query(
-            `INSERT INTO appointments (doctor_id, patient_id, cabinet_id, appointment_date, status, visit_type, notes, patient_user_id)
-             VALUES (?, ?, ?, ?, 'nouveau', ?, ?, ?)`,
-            [doctor_id, final_patient_id, cabinet_id, appointment_date, visit_type || 'consultation', notes || '', patient_user_id]
+            `INSERT INTO appointments (doctor_id, patient_id, cabinet_id, appointment_date, appointment_time, duration_minutes, status, visit_type, notes, patient_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, 'nouveau', ?, ?, ?)`,
+            [doctor_id, final_patient_id, cabinet_id, appointment_date, appointment_time || null, duration_minutes, visit_type || 'consultation', notes || '', patient_user_id]
         );
 
         res.status(201).json({ success: true, message: 'Rendez-vous réservé', id: result.insertId });
@@ -104,7 +108,10 @@ export const bookAppointment = async (req, res) => {
 export const getMyAppointments = async (req, res) => {
     try {
         const [appointments] = await pool.query(
-            `SELECT a.*, d.first_name as doc_first, d.last_name as doc_last, d.specialty,
+            `SELECT a.id, a.doctor_id, a.patient_id, a.cabinet_id, a.status, a.visit_type, a.notes, a.created_at,
+                    DATE_FORMAT(a.appointment_date, '%Y-%m-%d') as appointment_date,
+                    DATE_FORMAT(a.appointment_time, '%H:%i') as appointment_time,
+                    d.first_name as doc_first, d.last_name as doc_last, d.specialty,
                     c.name as cabinet_name, c.address as cabinet_address
              FROM appointments a
              JOIN doctors d ON a.doctor_id = d.id
