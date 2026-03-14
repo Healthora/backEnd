@@ -3,7 +3,7 @@ import pool from '../database.js';
 
 export const updateProfilSetting = async (req, res, next) => {
     try {
-        const { email, firstName, lastName, phone, specialty, onlineBooking } = req.body;
+        const { email, firstName, lastName, phone, specialty, onlineBooking, consultationDuration } = req.body;
         const doctorId = req.doctor.doctorId;
 
         if (!email || !firstName || !lastName || !phone || !specialty) {
