@@ -47,13 +47,14 @@ export const updateProfilSetting = async (req, res, next) => {
             last_name = ?,
             phone = ?,
             specialty = ?,
-            is_reservation_online = ?
+            is_reservation_online = ?,
+            consultation_duration = ?
             WHERE id = ?
-        `, [email, firstName, lastName, phone, specialty, onlineBooking ? 1 : 0, doctorId]);
+        `, [email, firstName, lastName, phone, specialty, onlineBooking ? 1 : 0, consultationDuration || 30, doctorId]);
 
         if (result.affectedRows > 0) {
             const [updatedUser] = await pool.query(
-                'SELECT id, email, first_name, last_name, phone, specialty, is_reservation_online FROM doctors WHERE id = ?',
+                'SELECT id, email, first_name, last_name, phone, specialty, is_reservation_online, consultation_duration FROM doctors WHERE id = ?',
                 [doctorId]
             );
 
@@ -67,7 +68,8 @@ export const updateProfilSetting = async (req, res, next) => {
                     lastName: updatedUser[0].last_name,
                     phone: updatedUser[0].phone,
                     specialty: updatedUser[0].specialty,
-                    onlineBooking: updatedUser[0].is_reservation_online === 1
+                    onlineBooking: updatedUser[0].is_reservation_online === 1,
+                    consultationDuration: updatedUser[0].consultation_duration
                 }
             });
         } else {

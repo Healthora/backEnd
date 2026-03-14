@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import { createAppointment, getAppointments, updateAppointmentStatus, updateAppointment, deleteAppointment, getAppointmentsByPatient } from '../controller/appointment.controller.js';
 import { verifyToken } from '../middleware/auth.middleware.js';

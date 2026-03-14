@@ -1,4 +1,4 @@
-import  pool  from '../database.js';
+import pool from '../database.js';
 
 export const createAppointment = async (req, res) => {
     try {
@@ -28,7 +28,7 @@ export const createAppointment = async (req, res) => {
         // We need to check if the patient's phone exists in patient_users to link the appointment
         const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
         let patient_user_id = null;
-        
+
         if (patientRows.length > 0 && patientRows[0].phone) {
             const phone = patientRows[0].phone;
             const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [phone]);
@@ -192,6 +192,7 @@ export const updateAppointment = async (req, res) => {
             updates.push('visit_type = ?');
             values.push(visit_type);
         }
+        
         if (status) {
             const validStatuses = ['nouveau', 'confirme', 'ne_repond_pas', 'reprogramme', 'absent', 'suivi', 'termine', 'annule'];
             if (!validStatuses.includes(status)) {
