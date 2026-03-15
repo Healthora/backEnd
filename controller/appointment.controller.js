@@ -26,16 +26,41 @@ export const createAppointment = async (req, res) => {
         const reqStatus = req.body.status;
         const finalStatus = (reqStatus && validStatuses.includes(reqStatus)) ? reqStatus : 'nouveau';
 
-        // Fix: Web-First Bug
-        // We need to check if the patient's phone exists in patient_users to link the appointment
-        const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
+        let final_patient_id = patient_id;
         let patient_user_id = null;
 
-        if (patientRows.length > 0 && patientRows[0].phone) {
-            const phone = patientRows[0].phone;
-            const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [phone]);
+        // If the patient is coming from the app but not yet in the doctor's table
+        if (req.body.is_external_user) {
+            const [userRows] = await pool.query('SELECT * FROM patient_users WHERE id = ?', [patient_id]);
             if (userRows.length > 0) {
-                patient_user_id = userRows[0].id;
+                const u = userRows[0];
+                patient_user_id = u.id;
+                
+                // Double check if they were added in the meantime
+                const [existing] = await pool.query(
+                    'SELECT id FROM patients WHERE doctor_id = ? AND (phone = ? OR email = ?)',
+                    [doctor_id, u.phone || null, u.email || null]
+                );
+                
+                if (existing.length > 0) {
+                    final_patient_id = existing[0].id;
+                } else {
+                    const [insertResult] = await pool.query(
+                        `INSERT INTO patients (doctor_id, first_name, last_name, email, phone, address, birth_date, gender)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [doctor_id, u.first_name, u.last_name, u.email, u.phone, u.address || null, u.birth_date || null, u.gender || 'M']
+                    );
+                    final_patient_id = insertResult.insertId;
+                }
+            }
+        } else {
+            // Existing patient, check for patient_user link
+            const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
+            if (patientRows.length > 0 && patientRows[0].phone) {
+                const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [patientRows[0].phone]);
+                if (userRows.length > 0) {
+                    patient_user_id = userRows[0].id;
+                }
             }
         }
 
@@ -43,7 +68,7 @@ export const createAppointment = async (req, res) => {
             `INSERT INTO appointments 
             (doctor_id, patient_id, cabinet_id, appointment_date, appointment_time, duration_minutes, status, visit_type, notes, patient_user_id) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [doctor_id, patient_id, cabinet_id, appointment_date, appointment_time || null, duration_minutes || null, finalStatus, visit_type, notes || '', patient_user_id]
+            [doctor_id, final_patient_id, cabinet_id, appointment_date, appointment_time || null, duration_minutes || null, finalStatus, visit_type, notes || '', patient_user_id]
         );
 
         res.status(201).json({
