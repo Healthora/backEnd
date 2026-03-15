@@ -12,35 +12,76 @@ export const getAllPatient = async (req, res, next) => {
         }
 
         const searchTerm = req.query.search || '';
-        let query = `
-            SELECT 
-                p.*,
-                MAX(CASE WHEN pu.id IS NOT NULL THEN 1 ELSE 0 END) as is_app_user,
-                MAX(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as last_visit,
-                MIN(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as next_visit,
-                COUNT(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_past,
-                COUNT(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_future,
-                COUNT(CASE WHEN a.status IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as nrp_count
-            FROM patients p
-            LEFT JOIN appointments a ON a.patient_id = p.id
-            LEFT JOIN patient_users pu ON p.phone = pu.phone
-            WHERE p.doctor_id = ?
-        `;
-        let queryParams = [doctorId];
+        let query;
+        let queryParams = [];
 
         if (searchTerm) {
-            query += ` AND (
-                p.first_name LIKE ? OR 
-                p.last_name LIKE ? OR 
-                p.email LIKE ? OR 
-                p.phone LIKE ? OR
-                p.address LIKE ?
-            )`;
             const searchPattern = `%${searchTerm}%`;
-            queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
-        }
+            query = `
+                SELECT * FROM (
+                    SELECT 
+                        p.id, p.doctor_id, p.first_name, p.last_name, p.email, p.phone, p.birth_date, p.gender, p.address, p.created_at,
+                        MAX(CASE WHEN pu.id IS NOT NULL THEN 1 ELSE 0 END) as is_app_user,
+                        0 as is_external_user,
+                        MAX(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as last_visit,
+                        MIN(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as next_visit,
+                        COUNT(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_past,
+                        COUNT(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_future,
+                        COUNT(CASE WHEN a.status IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as nrp_count
+                    FROM patients p
+                    LEFT JOIN appointments a ON a.patient_id = p.id
+                    LEFT JOIN patient_users pu ON p.phone = pu.phone
+                    WHERE p.doctor_id = ? AND (
+                        p.first_name LIKE ? OR 
+                        p.last_name LIKE ? OR 
+                        p.email LIKE ? OR 
+                        p.phone LIKE ? OR
+                        p.address LIKE ?
+                    )
+                    GROUP BY p.id
 
-        query += ` GROUP BY p.id`;
+                    UNION ALL
+
+                    SELECT 
+                        pu.id, NULL as doctor_id, pu.first_name, pu.last_name, pu.email, pu.phone, pu.birth_date, pu.gender, pu.address, pu.created_at,
+                        1 as is_app_user,
+                        1 as is_external_user,
+                        NULL as last_visit,
+                        NULL as next_visit,
+                        0 as total_past,
+                        0 as total_future,
+                        0 as nrp_count
+                    FROM patient_users pu
+                    WHERE (pu.first_name LIKE ? OR pu.last_name LIKE ? OR pu.email LIKE ? OR pu.phone LIKE ?)
+                    AND pu.phone NOT IN (SELECT phone FROM patients WHERE doctor_id = ? AND phone IS NOT NULL)
+                    AND pu.email NOT IN (SELECT email FROM patients WHERE doctor_id = ? AND email IS NOT NULL)
+                ) as results
+                ORDER BY is_external_user ASC, last_name ASC, first_name ASC
+            `;
+            queryParams = [
+                doctorId, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern,
+                searchPattern, searchPattern, searchPattern, searchPattern, 
+                doctorId, doctorId
+            ];
+        } else {
+            query = `
+                SELECT 
+                    p.*,
+                    MAX(CASE WHEN pu.id IS NOT NULL THEN 1 ELSE 0 END) as is_app_user,
+                    0 as is_external_user,
+                    MAX(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as last_visit,
+                    MIN(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as next_visit,
+                    COUNT(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_past,
+                    COUNT(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_future,
+                    COUNT(CASE WHEN a.status IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as nrp_count
+                FROM patients p
+                LEFT JOIN appointments a ON a.patient_id = p.id
+                LEFT JOIN patient_users pu ON p.phone = pu.phone
+                WHERE p.doctor_id = ?
+                GROUP BY p.id
+            `;
+            queryParams = [doctorId];
+        }
 
         const [patients] = await pool.query(query, queryParams);
 
