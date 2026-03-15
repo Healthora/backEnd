@@ -195,6 +195,8 @@ export const updateAppointment = async (req, res) => {
     try {
         const { id } = req.params;
         const {
+            patient_id,
+            is_external_user,
             appointment_date,
             appointment_time,
             duration_minutes,
@@ -202,9 +204,10 @@ export const updateAppointment = async (req, res) => {
             status,
             notes
         } = req.body;
+        const doctor_id = req.doctor.doctorId;
 
         // Check if appointment exists
-        const [existing] = await pool.query('SELECT * FROM appointments WHERE id = ? AND doctor_id = ?', [id, req.doctor.doctorId]);
+        const [existing] = await pool.query('SELECT * FROM appointments WHERE id = ? AND doctor_id = ?', [id, doctor_id]);
         if (existing.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -214,6 +217,49 @@ export const updateAppointment = async (req, res) => {
 
         const updates = [];
         const values = [];
+
+        if (patient_id) {
+            let final_patient_id = patient_id;
+            let patient_user_id = null;
+
+            if (is_external_user) {
+                const [userRows] = await pool.query('SELECT * FROM patient_users WHERE id = ?', [patient_id]);
+                if (userRows.length > 0) {
+                    const u = userRows[0];
+                    patient_user_id = u.id;
+                    
+                    const [docPatient] = await pool.query(
+                        'SELECT id FROM patients WHERE doctor_id = ? AND (phone = ? OR email = ?)',
+                        [doctor_id, u.phone || null, u.email || null]
+                    );
+                    
+                    if (docPatient.length > 0) {
+                        final_patient_id = docPatient[0].id;
+                    } else {
+                        const [insertResult] = await pool.query(
+                            `INSERT INTO patients (doctor_id, first_name, last_name, email, phone, address, birth_date, gender)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [doctor_id, u.first_name, u.last_name, u.email, u.phone, u.address || null, u.birth_date || null, u.gender || 'M']
+                        );
+                        final_patient_id = insertResult.insertId;
+                    }
+                }
+            } else {
+                const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
+                if (patientRows.length > 0 && patientRows[0].phone) {
+                    const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [patientRows[0].phone]);
+                    if (userRows.length > 0) {
+                        patient_user_id = userRows[0].id;
+                    }
+                }
+            }
+
+            updates.push('patient_id = ?');
+            values.push(final_patient_id);
+            
+            updates.push('patient_user_id = ?');
+            values.push(patient_user_id);
+        }
 
         if (appointment_date) {
             updates.push('appointment_date = ?');
@@ -249,7 +295,7 @@ export const updateAppointment = async (req, res) => {
         }
 
         // Retroactive fix: Check if patient_user_id needs syncing
-        if (!existing[0].patient_user_id) {
+        if (!existing[0].patient_user_id && !updates.includes('patient_user_id = ?')) {
             const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [existing[0].patient_id]);
             if (patientRows.length > 0 && patientRows[0].phone) {
                 const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [patientRows[0].phone]);
