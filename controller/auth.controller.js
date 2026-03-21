@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../database.js';
 import crypto from 'crypto';
-import { sendResetEmail } from '../utils/email.js';
+import { sendResetEmail, sendPatientResetEmail } from '../utils/email.js';
 
 export const signUp = async (req, res, next) => {
     const connection = await pool.getConnection();
@@ -525,5 +525,89 @@ export const patientSignIn = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+};
+
+export const patientForgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email requis' });
+        }
+
+        const [users] = await pool.query('SELECT id, email, first_name FROM patient_users WHERE email = ?', [email]);
+        
+        if (users.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'Si un compte existe avec cet e-mail, un lien de réinitialisation sera envoyé'
+            });
+        }
+
+        const user = users[0];
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = new Date();
+        expires.setHours(expires.getHours() + 1);
+
+        await pool.query(
+            'UPDATE patient_users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+            [token, expires, user.id]
+        );
+
+        const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
+        const resetLink = `${frontendUrl}/reset-password-patient/${token}`;
+        
+        await sendPatientResetEmail(user.email, resetLink);
+
+        res.status(200).json({
+            success: true,
+            message: 'E-mail de réinitialisation envoyé'
+        });
+    } catch (error) {
+        console.error('Patient forgot password error:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la demande' });
+    }
+};
+
+export const patientResetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password) {
+            return res.status(400).json({ success: false, message: 'Données manquantes' });
+        }
+
+        const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule et un chiffre'
+            });
+        }
+
+        const [users] = await pool.query(
+            'SELECT id FROM patient_users WHERE reset_token = ? AND reset_token_expires > NOW()',
+            [token]
+        );
+
+        if (users.length === 0) {
+            return res.status(400).json({ success: false, message: 'Lien invalide ou expiré' });
+        }
+
+        const userId = users[0].id;
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        await pool.query(
+            'UPDATE patient_users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+            [hashedPassword, userId]
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Mot de passe mis à jour avec succès'
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la réinitialisation' });
     }
 };

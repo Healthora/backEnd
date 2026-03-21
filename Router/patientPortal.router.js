@@ -1,7 +1,9 @@
 import { Router } from "express";
 import {
     patientSignUp,
-    patientSignIn
+    patientSignIn,
+    patientForgotPassword,
+    patientResetPassword
 } from "../controller/auth.controller.js";
 import {
     getDoctors,
@@ -22,6 +24,8 @@ const portalRouter = Router();
 // Auth Public
 portalRouter.post('/auth/signup', patientSignUp);
 portalRouter.post('/auth/signin', patientSignIn);
+portalRouter.post('/auth/forgot-password', patientForgotPassword);
+portalRouter.post('/auth/reset-password', patientResetPassword);
 
 
 // Search Public
