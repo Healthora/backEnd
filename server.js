@@ -8,10 +8,24 @@ import appointmentRouter from './Router/appointment.router.js';
 import ordonnanceRouter from './Router/ordonnance.router.js';
 import portalRouter from './Router/patientPortal.router.js';
 import locationRouter from './Router/location.router.js';
+import pool from './database.js';
 
 dotenv.config();
 
 const app = express();
+
+// Test DB Connection
+pool.getConnection()
+  .then(conn => {
+    console.log("✅ Database connected successfully!");
+    conn.release();
+  })
+  .catch(err => {
+    console.error("❌ Database connection failed during startup:", err.message);
+    if (err.code === 'ETIMEDOUT') {
+        console.error("💡 Hint: Your connection is timing out. If you are using the public Railway URL (tramway.proxy.rlwy.net), you MUST specify the MYSQLPORT from your Railway dashboard.");
+    }
+  });
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
