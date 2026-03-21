@@ -138,13 +138,13 @@ export const signUp = async (req, res, next) => {
 
 export const signIn = async (req, res, next) => {
     try {
-        const { email, password } = req.body;
+        const { identifier, password } = req.body;
 
         // Validation des champs
-        if (!email || !password) {
+        if (!identifier || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Email et mot de passe requis'
+                message: 'Email ou Téléphone et mot de passe requis'
             });
         }
 
@@ -171,14 +171,15 @@ export const signIn = async (req, res, next) => {
                 c.schedule as cabinet_schedule
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
-            WHERE d.email = ?`,
-            [email]
+            WHERE d.email = ? OR d.phone = ?`,
+            [identifier, identifier]
         );
+
 
         if (doctors.length === 0) {
             return res.status(401).json({
                 success: false,
-                message: 'Email ou mot de passe incorrect'
+                message: 'Email/Téléphone ou mot de passe incorrect'
             });
         }
 
@@ -190,7 +191,7 @@ export const signIn = async (req, res, next) => {
         if (!isPasswordValid) {
             return res.status(401).json({
                 success: false,
-                message: 'Email ou mot de passe incorrect'
+                message: 'Email/Téléphone ou mot de passe incorrect'
             });
         }
 
@@ -366,7 +367,7 @@ export const patientSignUp = async (req, res) => {
                  WHERE p.phone = ?`,
                 [newUserId, phone]
             );
-            
+
             await pool.query(
                 `UPDATE prescriptions pr 
                  JOIN patients p ON pr.patient_id = p.id 
