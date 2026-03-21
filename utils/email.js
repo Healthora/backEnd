@@ -3,10 +3,16 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // Use SSL
     auth: {
         user: process.env.EMAIL_USER || 'kebdaniissam780@gmail.com',
         pass: process.env.EMAIL_PASS || 'iadulhwskdohjqsh'
+    },
+    // Force IPv4 as Railway sometimes has issues with IPv6 resolving for Gmail
+    dns: {
+        family: 4
     }
 });
 
