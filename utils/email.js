@@ -48,11 +48,12 @@ export const sendResetEmail = async (to, resetLink) => {
     };
 
     try {
-        await transporter.sendMail(mailOptions);
+        console.log('Nodemailer: sending mail to:', to);
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Nodemailer: mail sent, messageId:', info.messageId);
         return true;
     } catch (error) {
-        console.error('Error sending email:', error);
-        console.error(error.stack);
+        console.error('Nodemailer error sending email:', error);
         throw new Error('Erreur lors de l\'envoi de l\'e-mail : ' + error.message);
     }
 };
@@ -81,11 +82,12 @@ export const sendPatientResetEmail = async (to, resetLink) => {
     };
 
     try {
-        await transporter.sendMail(mailOptions);
+        console.log('Nodemailer: sending patient mail to:', to);
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Nodemailer: patient mail sent, messageId:', info.messageId);
         return true;
     } catch (error) {
-        console.error('Error sending email:', error);
-        console.error(error.stack);
+        console.error('Nodemailer error sending patient email:', error);
         throw new Error('Erreur lors de l\'envoi de l\'e-mail : ' + error.message);
     }
 };

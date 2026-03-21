@@ -427,7 +427,12 @@ export const forgotPassword = async (req, res) => {
         const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetLink = `${frontendUrl}/reset-password/${token}`;
         
-        await sendResetEmail(doctor.email, resetLink);
+        console.log('Sending reset email to:', doctor.email);
+        
+        // Use a non-blocking approach to avoid hanging the request
+        sendResetEmail(doctor.email, resetLink)
+            .then(() => console.log('Reset email sent successfully to:', doctor.email))
+            .catch(err => console.error('Failed to send reset email to:', doctor.email, err));
 
         res.status(200).json({
             success: true,
@@ -555,9 +560,12 @@ export const patientForgotPassword = async (req, res) => {
         );
 
         const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
-        const resetLink = `${frontendUrl}/reset-password-patient/${token}`;
+        console.log('Sending patient reset email to:', user.email);
         
-        await sendPatientResetEmail(user.email, resetLink);
+        // Use a non-blocking approach to avoid hanging the request
+        sendPatientResetEmail(user.email, resetLink)
+            .then(() => console.log('Patient reset email sent successfully to:', user.email))
+            .catch(err => console.error('Failed to send patient reset email to:', user.email, err));
 
         res.status(200).json({
             success: true,
