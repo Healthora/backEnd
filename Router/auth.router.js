@@ -5,6 +5,8 @@ import {
     signUp,
     signOut,
     getCurrentDoctor,
+    forgotPassword,
+    resetPassword,
 } from "../controller/auth.controller.js";
 import { verifyToken } from "../middleware/auth.middleware.js";
 
@@ -17,5 +19,8 @@ authRouter.post('/signin', signIn);
 authRouter.post('/signout', verifyToken, signOut);
 
 authRouter.get('/me', verifyToken, getCurrentDoctor);
+
+authRouter.post('/forgot-password', forgotPassword);
+authRouter.post('/reset-password', resetPassword);
 
 export default authRouter;

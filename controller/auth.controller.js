@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../database.js';
+import crypto from 'crypto';
+import { sendResetEmail } from '../utils/email.js';
 
 export const signUp = async (req, res, next) => {
     const connection = await pool.getConnection();
@@ -392,6 +394,79 @@ export const patientSignUp = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+};
+
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email requis' });
+        }
+
+        const [doctors] = await pool.query('SELECT id, email, first_name FROM doctors WHERE email = ?', [email]);
+        
+        if (doctors.length === 0) {
+            return res.status(404).json({ success: false, message: 'Aucun compte trouvé avec cet e-mail' });
+        }
+
+        const doctor = doctors[0];
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = new Date();
+        expires.setHours(expires.getHours() + 1);
+
+        await pool.query(
+            'UPDATE doctors SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+            [token, expires, doctor.id]
+        );
+
+        const frontendUrl = process.env.VITE_API_URL ? "https://aymen.linguaflo.me" : 'http://localhost:5173';
+        const resetLink = `${frontendUrl}/reset-password/${token}`;
+        
+        await sendResetEmail(doctor.email, resetLink);
+
+        res.status(200).json({
+            success: true,
+            message: 'E-mail de réinitialisation envoyé'
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la demande' });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password) {
+            return res.status(400).json({ success: false, message: 'Données manquantes' });
+        }
+
+        const [doctors] = await pool.query(
+            'SELECT id FROM doctors WHERE reset_token = ? AND reset_token_expires > NOW()',
+            [token]
+        );
+
+        if (doctors.length === 0) {
+            return res.status(400).json({ success: false, message: 'Lien invalide ou expiré' });
+        }
+
+        const doctorId = doctors[0].id;
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        await pool.query(
+            'UPDATE doctors SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+            [hashedPassword, doctorId]
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Mot de passe mis à jour'
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la réinitialisation' });
     }
 };
 
