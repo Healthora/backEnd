@@ -1,4 +1,75 @@
 import pool from '../database.js';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true
+});
+
+// Multer: store file in memory (no disk writes)
+const storage = multer.memoryStorage();
+export const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
+});
+
+const uploadImageToCloudinary = (buffer, mimetype) =>
+  new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: 'doctorapp/doctors',
+          resource_type: 'image',
+          format: mimetype.split('/')[1] || 'jpg',
+        },
+        (error, result) => {
+          if (error) {
+            console.error('Cloudinary Image Upload Error:', error);
+            reject(error);
+          } else {
+            console.log('Cloudinary Image Upload Success:', result.secure_url);
+            resolve(result);
+          }
+        }
+      )
+      .end(buffer);
+  });
+
+export const uploadDoctorImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image file provided' });
+    }
+
+    const doctorId = req.doctor.doctorId;
+    const result = await uploadImageToCloudinary(req.file.buffer, req.file.mimetype);
+
+    await pool.query('UPDATE doctors SET img_url = ? WHERE id = ?', [result.secure_url, doctorId]);
+
+    // Update localStorage-compatible response
+    res.status(200).json({
+      success: true,
+      message: 'Photo de profil mise à jour avec succès',
+      data: { imgUrl: result.secure_url }
+    });
+  } catch (error) {
+    console.error('Upload doctor image error:', error);
+    res.status(500).json({ success: false, message: 'Erreur lors du téléchargement de la photo' });
+  }
+};
 
 const syncAvailabilities = async (connection, doctorId, cabinetId, schedule, slotDuration) => {
     try {
