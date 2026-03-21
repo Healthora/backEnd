@@ -10,6 +10,15 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+// Verify connection configuration
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error('Nodemailer verification failed:', error);
+    } else {
+        console.log('Server is ready to take our messages');
+    }
+});
+
 /**
  * Send reset password email to doctor
  * @param {string} to email address
@@ -43,6 +52,7 @@ export const sendResetEmail = async (to, resetLink) => {
         return true;
     } catch (error) {
         console.error('Error sending email:', error);
-        throw new Error('Erreur lors de l\'envoi de l\'e-mail');
+        console.error(error.stack);
+        throw new Error('Erreur lors de l\'envoi de l\'e-mail : ' + error.message);
     }
 };

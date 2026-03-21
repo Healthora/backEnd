@@ -407,7 +407,11 @@ export const forgotPassword = async (req, res) => {
         const [doctors] = await pool.query('SELECT id, email, first_name FROM doctors WHERE email = ?', [email]);
         
         if (doctors.length === 0) {
-            return res.status(404).json({ success: false, message: 'Aucun compte trouvé avec cet e-mail' });
+            // Always return success to avoid enumeration
+            return res.status(200).json({
+                success: true,
+                message: 'Si un compte existe avec cet e-mail, un lien de réinitialisation sera envoyé'
+            });
         }
 
         const doctor = doctors[0];
@@ -420,7 +424,7 @@ export const forgotPassword = async (req, res) => {
             [token, expires, doctor.id]
         );
 
-        const frontendUrl = process.env.VITE_API_URL ? "https://aymen.linguaflo.me" : 'http://localhost:5173';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetLink = `${frontendUrl}/reset-password/${token}`;
         
         await sendResetEmail(doctor.email, resetLink);
@@ -430,7 +434,7 @@ export const forgotPassword = async (req, res) => {
             message: 'E-mail de réinitialisation envoyé'
         });
     } catch (error) {
-        console.error(error);
+        console.error('Forgot password error:', error);
         res.status(500).json({ success: false, message: 'Erreur lors de la demande' });
     }
 };
@@ -440,6 +444,15 @@ export const resetPassword = async (req, res) => {
         const { token, password } = req.body;
         if (!token || !password) {
             return res.status(400).json({ success: false, message: 'Données manquantes' });
+        }
+
+        // Add password validation
+        const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule et un chiffre'
+            });
         }
 
         const [doctors] = await pool.query(
