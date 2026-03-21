@@ -35,7 +35,8 @@ const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.includes(origin)) {
+    // Automatically allow local network IPs for testing on mobile devices
+    if (allowedOrigins.includes(origin) || origin.match(/^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
