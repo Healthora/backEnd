@@ -424,7 +424,7 @@ export const forgotPassword = async (req, res) => {
             [token, expires, doctor.id]
         );
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetLink = `${frontendUrl}/reset-password/${token}`;
         
         await sendResetEmail(doctor.email, resetLink);
