@@ -5,7 +5,7 @@ export const getDoctors = async (req, res) => {
     try {
         const { search, specialty, wilaya, commune } = req.query;
         let query = `
-            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online,
+            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url
                    c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
@@ -42,7 +42,7 @@ export const getDoctorDetails = async (req, res) => {
     try {
         const { id } = req.params;
         const [doctors] = await pool.query(
-            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online,
+            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url
                     c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.schedule, c.id as cabinet_id
              FROM doctors d
              LEFT JOIN cabinets c ON d.id = c.doctor_id
