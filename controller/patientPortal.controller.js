@@ -5,20 +5,26 @@ export const getDoctors = async (req, res) => {
     try {
         const { search, specialty, wilaya, commune } = req.query;
         let query = `
-            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url,
+            SELECT d.id, d.first_name, d.last_name, s.name as specialty, d.phone, d.bio, d.is_reservation_online, d.img_url,
                    c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
+            LEFT JOIN speciality s ON d.specialty = s.id
             WHERE 1=1
         `;
         const params = [];
 
         if (search) {
-            query += ` AND (d.first_name LIKE ? OR d.last_name LIKE ? OR d.specialty LIKE ? OR c.name LIKE ?)`;
+            query += ` AND (d.first_name LIKE ? OR d.last_name LIKE ? OR s.name LIKE ? OR c.name LIKE ?)`;
             params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
         }
         if (specialty) {
-            query += ` AND d.specialty = ?`;
+            // Check if specialty is an ID or name
+            if (!isNaN(specialty)) {
+                query += ` AND d.specialty = ?`;
+            } else {
+                query += ` AND s.name = ?`;
+            }
             params.push(specialty);
         }
         if (wilaya) {
@@ -42,10 +48,11 @@ export const getDoctorDetails = async (req, res) => {
     try {
         const { id } = req.params;
         const [doctors] = await pool.query(
-            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url,
+            `SELECT d.id, d.email, d.first_name, d.last_name, s.name as specialty, d.phone, d.bio, d.is_reservation_online, d.img_url,
                     c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.schedule, c.id as cabinet_id
              FROM doctors d
              LEFT JOIN cabinets c ON d.id = c.doctor_id
+             LEFT JOIN speciality s ON d.specialty = s.id
              WHERE d.id = ?`,
             [id]
         );
@@ -149,10 +156,11 @@ export const getMyAppointments = async (req, res) => {
             `SELECT a.id, a.doctor_id, a.patient_id, a.cabinet_id, a.status, a.visit_type, a.notes, a.created_at,
                     DATE_FORMAT(a.appointment_date, '%Y-%m-%d') as appointment_date,
                     DATE_FORMAT(a.appointment_time, '%H:%i') as appointment_time,
-                    d.first_name as doc_first, d.last_name as doc_last, d.specialty,
+                    d.first_name as doc_first, d.last_name as doc_last, s.name as doc_specialty,
                     c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address
              FROM appointments a
              JOIN doctors d ON a.doctor_id = d.id
+             LEFT JOIN speciality s ON d.specialty = s.id
              LEFT JOIN cabinets c ON a.cabinet_id = c.id
              WHERE a.patient_user_id = ?
              ORDER BY a.appointment_date DESC, a.appointment_time ASC`,
@@ -173,9 +181,10 @@ export const getMyPrescriptions = async (req, res) => {
                 p.created_at,
                 d.first_name as doctor_first_name,
                 d.last_name as doctor_last_name,
-                d.specialty as doctor_specialty
+                s.name as doctor_specialty
              FROM prescriptions p
              JOIN doctors d ON p.doctor_id = d.id
+             LEFT JOIN speciality s ON d.specialty = s.id
              WHERE p.patient_user_id = ?
              ORDER BY p.created_at DESC`,
             [req.patient.id]

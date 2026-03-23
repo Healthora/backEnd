@@ -159,7 +159,7 @@ export const signIn = async (req, res, next) => {
                 d.first_name, 
                 d.last_name,
                 d.phone,
-                d.specialty,
+                d.specialty as specialty_id,
                 d.bio,
                 d.img_url,
                 d.is_reservation_online,
@@ -170,9 +170,11 @@ export const signIn = async (req, res, next) => {
                 c.commune,
                 c.address as cabinet_address,
                 c.id as cabinet_id,
-                c.schedule as cabinet_schedule
+                c.schedule as cabinet_schedule,
+                s.name as specialty
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
+            LEFT JOIN speciality s ON d.specialty = s.id
             WHERE d.email = ? OR d.phone = ?`,
             [identifier, identifier]
         );
@@ -272,7 +274,7 @@ export const getCurrentDoctor = async (req, res, next) => {
                 d.first_name, 
                 d.last_name,
                 d.phone,
-                d.specialty,
+                d.specialty as specialty_id,
                 d.bio,
                 d.img_url,
                 d.is_reservation_online,
@@ -284,9 +286,11 @@ export const getCurrentDoctor = async (req, res, next) => {
                 c.commune,
                 c.address as cabinet_address,
                 c.id as cabinet_id,
-                c.schedule as cabinet_schedule
+                c.schedule as cabinet_schedule,
+                s.name as specialty
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
+            LEFT JOIN speciality s ON d.specialty = s.id
             WHERE d.id = ?`,
             [doctorId]
         );

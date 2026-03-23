@@ -8,6 +8,7 @@ import appointmentRouter from './Router/appointment.router.js';
 import ordonnanceRouter from './Router/ordonnance.router.js';
 import portalRouter from './Router/patientPortal.router.js';
 import locationRouter from './Router/location.router.js';
+import specialityRouter from './Router/speciality.router.js';
 import pool from './database.js';
 
 dotenv.config();
@@ -58,6 +59,7 @@ app.use('/appointments', appointmentRouter);
 app.use('/ordonnance', ordonnanceRouter);
 app.use('/api/patient-portal', portalRouter);
 app.use('/location', locationRouter);
+app.use('/speciality', specialityRouter);
 
 app.get('/', (req, res) => {
     res.send("Server is running");
