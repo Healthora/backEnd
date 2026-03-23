@@ -5,7 +5,7 @@ export const getDoctors = async (req, res) => {
     try {
         const { search, specialty, wilaya, commune } = req.query;
         let query = `
-            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url
+            SELECT d.id, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url,
                    c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.id as cabinet_id
             FROM doctors d
             LEFT JOIN cabinets c ON d.id = c.doctor_id
@@ -42,7 +42,7 @@ export const getDoctorDetails = async (req, res) => {
     try {
         const { id } = req.params;
         const [doctors] = await pool.query(
-            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url
+            `SELECT d.id, d.email, d.first_name, d.last_name, d.specialty, d.phone, d.bio, d.is_reservation_online, d.img_url,
                     c.name as cabinet_name, c.wilaya, c.commune, c.address as cabinet_address, c.schedule, c.id as cabinet_id
              FROM doctors d
              LEFT JOIN cabinets c ON d.id = c.doctor_id
@@ -73,7 +73,7 @@ export const bookAppointment = async (req, res) => {
 
         // Fetch doctor's settings
         const [doctorRows] = await pool.query('SELECT consultation_duration, is_reservation_online FROM doctors WHERE id = ?', [doctor_id]);
-        
+
         if (doctorRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Médecin introuvable' });
         }
@@ -108,6 +108,22 @@ export const bookAppointment = async (req, res) => {
         } else {
             final_patient_id = privateRecord[0].id;
         }
+
+        // --- ANTI-DOUBLE BOOKING CHECK ---
+        const [conflict] = await pool.query(
+            `SELECT id FROM appointments 
+             WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? 
+             AND status NOT IN ('annule', 'absent')`,
+            [doctor_id, appointment_date, appointment_time]
+        );
+
+        if (conflict.length > 0) {
+            return res.status(409).json({ 
+                success: false, 
+                message: 'Ce créneau est déjà réservé par un autre patient. Veuillez en choisir un autre.' 
+            });
+        }
+        // ---------------------------------
 
         const [result] = await pool.query(
             `INSERT INTO appointments (doctor_id, patient_id, cabinet_id, appointment_date, appointment_time, duration_minutes, status, visit_type, notes, patient_user_id)
@@ -175,7 +191,7 @@ export const getMyPrescriptions = async (req, res) => {
 export const getMyProfile = async (req, res) => {
     try {
         const [users] = await pool.query(
-            `SELECT id, email, first_name, last_name, phone, address, birth_date, gender, bio
+            `SELECT id, email, first_name, last_name, phone, address, birth_date, gender, bio, wilaya, commune
              FROM patient_users WHERE id = ?`,
             [req.patient.id]
         );
@@ -194,7 +210,9 @@ export const getMyProfile = async (req, res) => {
                 address: u.address,
                 birthDate: u.birth_date,
                 gender: u.gender,
-                bio: u.bio
+                bio: u.bio,
+                wilaya: u.wilaya,
+                commune: u.commune
             }
         });
     } catch (error) {
@@ -206,7 +224,7 @@ export const getMyProfile = async (req, res) => {
 // Update current patient profile
 export const updateMyProfile = async (req, res) => {
     try {
-        const { firstName, lastName, phone, address, birthDate, gender, bio } = req.body;
+        const { firstName, lastName, phone, address, birthDate, gender, bio, wilaya, commune } = req.body;
 
         // Build dynamic update query with only provided fields
         const fields = [];
@@ -219,6 +237,8 @@ export const updateMyProfile = async (req, res) => {
         if (birthDate !== undefined) { fields.push('birth_date = ?'); values.push(birthDate); }
         if (gender !== undefined) { fields.push('gender = ?'); values.push(gender); }
         if (bio !== undefined) { fields.push('bio = ?'); values.push(bio); }
+        if (wilaya !== undefined) { fields.push('wilaya = ?'); values.push(wilaya); }
+        if (commune !== undefined) { fields.push('commune = ?'); values.push(commune); }
 
         if (fields.length === 0) {
             return res.status(400).json({ success: false, message: 'Aucune donnée à mettre à jour' });
@@ -232,7 +252,7 @@ export const updateMyProfile = async (req, res) => {
 
         // Return fresh data
         const [updated] = await pool.query(
-            `SELECT id, email, first_name, last_name, phone, address, birth_date, gender, bio
+            `SELECT id, email, first_name, last_name, phone, address, birth_date, gender, bio, wilaya, commune
              FROM patient_users WHERE id = ?`,
             [req.patient.id]
         );
@@ -256,7 +276,7 @@ export const updateMyProfile = async (req, res) => {
                     patientValues
                 );
             }
-            
+
             // If phone itself changed, we need a special update to avoid breaking links
             if (phone !== undefined && phone.trim() !== req.patient.phone) {
                 await pool.query('UPDATE patients SET phone = ? WHERE phone = ?', [phone.trim(), req.patient.phone]);
@@ -279,7 +299,9 @@ export const updateMyProfile = async (req, res) => {
                 address: u.address,
                 birthDate: u.birth_date,
                 gender: u.gender,
-                bio: u.bio
+                bio: u.bio,
+                wilaya: u.wilaya,
+                commune: u.commune
             }
         });
     } catch (error) {
@@ -365,22 +387,18 @@ export const getDoctorAvailableSlots = async (req, res) => {
             const [startH, startM] = avail.start_time.split(':').map(Number);
             const [endH, endM] = avail.end_time.split(':').map(Number);
 
-            let currentH = startH;
-            let currentM = startM;
             const duration = avail.slot_duration || 30;
 
-            if (duration <= 0) return; // Safety check
+            if (duration <= 0) return;
 
-            while (currentH < endH || (currentH === endH && currentM < endM)) {
-                const hStr = currentH.toString().padStart(2, '0');
-                const mStr = currentM.toString().padStart(2, '0');
-                allSlots.push(`${hStr}:${mStr}`);
+            const endTotal = endH * 60 + endM;
+            let currentTotal = startH * 60 + startM;
 
-                currentM += duration;
-                if (currentM >= 60) {
-                    currentH += Math.floor(currentM / 60);
-                    currentM = currentM % 60;
-                }
+            while (currentTotal + duration <= endTotal) {
+                const h = Math.floor(currentTotal / 60);
+                const m = currentTotal % 60;
+                allSlots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+                currentTotal += duration;
             }
         });
 
@@ -395,10 +413,22 @@ export const getDoctorAvailableSlots = async (req, res) => {
             [doctorId, date]
         );
 
-        // 4. Filter out overlapping slots
+        // 4. Filter out past slots (if date is today) and overlapping slots
+        const now = new Date();
+        const yearN = now.getFullYear();
+        const monthN = (now.getMonth() + 1).toString().padStart(2, '0');
+        const dayN = now.getDate().toString().padStart(2, '0');
+        const todayStr = `${yearN}-${monthN}-${dayN}`;
+        const nowTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
         const availableSlots = allSlots.filter(slot => {
             const [slotH, slotM] = slot.split(':').map(Number);
             const slotTotalMinutes = slotH * 60 + slotM;
+
+            // Past slot check
+            if (date === todayStr && slotTotalMinutes < nowTotalMinutes) {
+                return false;
+            }
 
             return !bookedAppointments.some(booked => {
                 const [bookedH, bookedM] = booked.start_time.split(':').map(Number);

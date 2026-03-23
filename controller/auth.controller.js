@@ -338,7 +338,7 @@ export const getCurrentDoctor = async (req, res, next) => {
 
 export const patientSignUp = async (req, res) => {
     try {
-        const { firstName, lastName, email, password, phone, address, birthDate, gender } = req.body;
+        const { firstName, lastName, email, password, phone, address, birthDate, gender, wilaya, commune } = req.body;
 
         if (!firstName || !lastName || !email || !password) {
             return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
@@ -353,9 +353,9 @@ export const patientSignUp = async (req, res) => {
         const passwordHash = await bcrypt.hash(password, salt);
 
         const [result] = await pool.query(
-            `INSERT INTO patient_users (email, password, first_name, last_name, phone, address, birth_date, gender) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [email, passwordHash, firstName, lastName, phone, address, birthDate, gender || 'M']
+            `INSERT INTO patient_users (email, password, first_name, last_name, phone, address, birth_date, gender, wilaya, commune) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [email, passwordHash, firstName, lastName, phone, address, birthDate, gender || 'M', wilaya, commune]
         );
 
         const newUserId = result.insertId;
@@ -389,7 +389,7 @@ export const patientSignUp = async (req, res) => {
             success: true,
             message: 'Compte patient créé',
             token,
-            patient: { id: newUserId, email, firstName, lastName }
+            patient: { id: newUserId, email, firstName, lastName, phone, wilaya, commune }
         });
     } catch (error) {
         console.error(error);
@@ -405,7 +405,7 @@ export const forgotPassword = async (req, res) => {
         }
 
         const [doctors] = await pool.query('SELECT id, email, first_name FROM doctors WHERE email = ?', [email]);
-        
+
         if (doctors.length === 0) {
             // Always return success to avoid enumeration
             return res.status(200).json({
@@ -426,13 +426,13 @@ export const forgotPassword = async (req, res) => {
 
         const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetLink = `${frontendUrl}/reset-password/${token}`;
-        
+
         console.log('Sending reset email to:', doctor.email);
-        
+
         try {
             await sendResetEmail(doctor.email, resetLink);
             console.log('Reset email sent successfully to:', doctor.email);
-            
+
             res.status(200).json({
                 success: true,
                 message: 'E-mail de réinitialisation envoyé'
@@ -530,7 +530,9 @@ export const patientSignIn = async (req, res) => {
                 phone: user.phone,
                 address: user.address,
                 birthDate: user.birth_date,
-                gender: user.gender
+                gender: user.gender,
+                wilaya: user.wilaya,
+                commune: user.commune
             }
         });
     } catch (error) {
@@ -547,7 +549,7 @@ export const patientForgotPassword = async (req, res) => {
         }
 
         const [users] = await pool.query('SELECT id, email, first_name FROM patient_users WHERE email = ?', [email]);
-        
+
         if (users.length === 0) {
             return res.status(200).json({
                 success: true,
@@ -567,13 +569,13 @@ export const patientForgotPassword = async (req, res) => {
 
         const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetLink = `${frontendUrl}/patient/reset-password/${token}`;
-        
+
         console.log('Sending patient reset email to:', user.email);
-        
+
         try {
             await sendPatientResetEmail(user.email, resetLink);
             console.log('Patient reset email sent successfully to:', user.email);
-            
+
             res.status(200).json({
                 success: true,
                 message: 'E-mail de réinitialisation envoyé'

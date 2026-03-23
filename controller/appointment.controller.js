@@ -64,6 +64,22 @@ export const createAppointment = async (req, res) => {
             }
         }
 
+        // --- ANTI-DOUBLE BOOKING CHECK ---
+        const [conflict] = await pool.query(
+            `SELECT id FROM appointments 
+             WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? 
+             AND status NOT IN ('annule', 'absent')`,
+            [doctor_id, appointment_date, appointment_time]
+        );
+
+        if (conflict.length > 0) {
+            return res.status(409).json({ 
+                success: false, 
+                message: 'Ce créneau est déjà réservé. Veuillez en choisir un autre.' 
+            });
+        }
+        // ---------------------------------
+
         const [result] = await pool.query(
             `INSERT INTO appointments 
             (doctor_id, patient_id, cabinet_id, appointment_date, appointment_time, duration_minutes, status, visit_type, notes, patient_user_id) 
@@ -441,22 +457,17 @@ export const getAvailableSlots = async (req, res) => {
             const [startH, startM] = avail.start_time.split(':').map(Number);
             const [endH, endM] = avail.end_time.split(':').map(Number);
 
-            let currentH = startH;
-            let currentM = startM;
             const duration = avail.slot_duration || 30; // Safety fallback
-
             if (duration <= 0) return; // Prevent infinite loop
 
-            while (currentH < endH || (currentH === endH && currentM < endM)) {
-                const hStr = currentH.toString().padStart(2, '0');
-                const mStr = currentM.toString().padStart(2, '0');
-                allSlots.push(`${hStr}:${mStr}`);
+            const endTotal = endH * 60 + endM;
+            let currentTotal = startH * 60 + startM;
 
-                currentM += duration;
-                if (currentM >= 60) {
-                    currentH += Math.floor(currentM / 60);
-                    currentM = currentM % 60;
-                }
+            while (currentTotal + duration <= endTotal) {
+                const h = Math.floor(currentTotal / 60);
+                const m = currentTotal % 60;
+                allSlots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+                currentTotal += duration;
             }
         });
 
@@ -471,10 +482,22 @@ export const getAvailableSlots = async (req, res) => {
             [doctorId, date]
         );
 
-        // 4. Filter out slots that overlap with ANY part of a booked appointment
+        // 4. Filter out slots that overlap with ANY part of a booked appointment OR are in the past
+        const now = new Date();
+        const yearN = now.getFullYear();
+        const monthN = (now.getMonth() + 1).toString().padStart(2, '0');
+        const dayN = now.getDate().toString().padStart(2, '0');
+        const todayStr = `${yearN}-${monthN}-${dayN}`;
+        const nowTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
         const availableSlots = allSlots.filter(slot => {
             const [slotH, slotM] = slot.split(':').map(Number);
             const slotTotalMinutes = slotH * 60 + slotM;
+
+            // Past slot check (for current day)
+            if (date === todayStr && slotTotalMinutes < nowTotalMinutes) {
+                return false;
+            }
 
             return !bookedAppointments.some(booked => {
                 const [bookedH, bookedM] = booked.start_time.split(':').map(Number);
