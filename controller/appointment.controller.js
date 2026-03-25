@@ -280,11 +280,15 @@ export const getAvailableSlots = async (req, res) => {
         const dayOfWeek = dayNames[dObj.getDay()];
 
         const [availabilities] = await pool.query(
-            'SELECT start_time, end_time, slot_duration, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ?',
+            'SELECT start_time, end_time, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ?',
             [doctorId, dayOfWeek]
         );
 
         if (availabilities.length === 0) return res.status(200).json({ success: true, data: [] });
+
+        // Fetch slot_duration from doctor
+        const [[doc]] = await pool.query('SELECT slot_duration FROM doctor WHERE id = ?', [doctorId]);
+        const slotDuration = doc?.slot_duration || 30;
 
         // 1. Check max days in advance
         const advanceDays = availabilities[0].selectione_les_jours_a_la_vance || 0;
@@ -306,7 +310,7 @@ export const getAvailableSlots = async (req, res) => {
         for (const avail of availabilities) {
             const [sH, sM] = avail.start_time.split(':').map(Number);
             const [eH, eM] = avail.end_time.split(':').map(Number);
-            const dur = avail.slot_duration || 30;
+            const dur = slotDuration;
             const endTotal = eH * 60 + eM;
             let cur = sH * 60 + sM;
             while (cur + dur <= endTotal) {
