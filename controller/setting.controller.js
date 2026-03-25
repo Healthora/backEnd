@@ -7,7 +7,7 @@ dotenv.config();
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
     secure: true
 });
@@ -81,9 +81,9 @@ const syncAvailabilities = async (connection, doctorId, schedule, slotDuration =
             if (slot.start && slot.end) {
                 try {
                     await connection.query(
-                        `INSERT INTO availability (doctor_id, day_of_week, start_time, end_time, slot_duration)
-                         VALUES (?, ?, ?, ?, ?)`,
-                        [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration]
+                        `INSERT INTO availability (doctor_id, day_of_week, start_time, end_time, slot_duration, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration, dayData.advanceBookingDays || 0, dayData.maxAppointmentsPerDay || 0]
                     );
                 } catch (err) {
                     console.error(`Failed to insert availability for ${dbDay}:`, err.message);
@@ -120,8 +120,8 @@ export const updateProfilSetting = async (req, res) => {
         }
 
         await connection.commit();
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: 'Profil mis à jour',
             data: { firstName, lastName, phone, specialtyId, bio }
         });
@@ -164,8 +164,8 @@ export const updateCabinetSetting = async (req, res) => {
         if (schedule) await syncAvailabilities(connection, doctorId, schedule);
 
         await connection.commit();
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: 'Cabinet mis à jour',
             data: { cabinetName, wilayaId, communId, cabinetAddress, schedule }
         });
@@ -194,8 +194,8 @@ export const updateRDVSetting = async (req, res) => {
             await connection.commit();
         }
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: 'Paramètres RDV mis à jour',
             data: { onlineBooking, consultationDuration, schedule }
         });

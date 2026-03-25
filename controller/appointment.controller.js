@@ -35,7 +35,42 @@ export const createAppointment = async (req, res) => {
             ? req.body.status
             : 'en attente';
 
-        // Ensure patient_doctor link exists
+        // 2. Constraints Check
+        const dObj = new Date(appointment_date);
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayOfWeek = dayNames[dObj.getDay()];
+
+        const [avail] = await pool.query(
+            'SELECT selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ? LIMIT 1',
+            [doctor_id, dayOfWeek]
+        );
+
+        if (avail.length > 0) {
+            const row = avail[0];
+            
+            // Advance Booking Range
+            if (row.selectione_les_jours_a_la_vance > 0) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((dObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                if (diffDays > row.selectione_les_jours_a_la_vance) {
+                    return res.status(400).json({ success: false, message: `Hors délai : Réservation possible jusqu'à ${row.selectione_les_jours_a_la_vance} jours à l'avance.` });
+                }
+            }
+
+            // Max Appointments per Day
+            if (row.selectione_les_number_of_appoi_by_day > 0) {
+                const [countRows] = await pool.query(
+                    "SELECT COUNT(*) as count FROM appointment WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('annulé', 'absent')",
+                    [doctor_id, appointment_date]
+                );
+                if (countRows[0].count >= row.selectione_les_number_of_appoi_by_day) {
+                    return res.status(400).json({ success: false, message: "Nombre maximum de rendez-vous pour cette journée déjà atteint." });
+                }
+            }
+        }
+
+        // 3. Ensure patient_doctor link exists
         const [link] = await pool.query(
             'SELECT id FROM patient_doctor WHERE patient_id = ? AND doctor_id = ?',
             [patient_id, doctor_id]
@@ -68,7 +103,7 @@ export const createAppointment = async (req, res) => {
              (doctor_id, patient_id, appointment_date, start_time, duration, status, note_doctor)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [doctor_id, patient_id, appointment_date,
-             start_time || null, duration || 30, finalStatus, note_doctor || '']
+                start_time || null, duration || 30, finalStatus, note_doctor || '']
         );
 
         res.status(201).json({
@@ -165,14 +200,14 @@ export const updateAppointment = async (req, res) => {
         const doctor_id = req.doctor.doctorId;
 
         const updates = [];
-        const values  = [];
+        const values = [];
 
-        if (patient_id)      { updates.push('patient_id = ?');      values.push(patient_id); }
-        if (appointment_date){ updates.push('appointment_date = ?'); values.push(appointment_date); }
-        if (start_time)      { updates.push('start_time = ?');      values.push(start_time); }
-        if (duration)         { updates.push('duration = ?');         values.push(duration); }
-        if (status)          { updates.push('status = ?');           values.push(status); }
-        if (note_doctor)      { updates.push('note_doctor = ?');      values.push(note_doctor); }
+        if (patient_id) { updates.push('patient_id = ?'); values.push(patient_id); }
+        if (appointment_date) { updates.push('appointment_date = ?'); values.push(appointment_date); }
+        if (start_time) { updates.push('start_time = ?'); values.push(start_time); }
+        if (duration) { updates.push('duration = ?'); values.push(duration); }
+        if (status) { updates.push('status = ?'); values.push(status); }
+        if (note_doctor) { updates.push('note_doctor = ?'); values.push(note_doctor); }
 
         if (updates.length === 0) {
             return res.status(400).json({ success: false, message: 'Pas de données' });
@@ -245,11 +280,27 @@ export const getAvailableSlots = async (req, res) => {
         const dayOfWeek = dayNames[dObj.getDay()];
 
         const [availabilities] = await pool.query(
-            'SELECT start_time, end_time, slot_duration FROM availability WHERE doctor_id = ? AND day_of_week = ?',
+            'SELECT start_time, end_time, slot_duration, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ?',
             [doctorId, dayOfWeek]
         );
 
         if (availabilities.length === 0) return res.status(200).json({ success: true, data: [] });
+
+        // 1. Check max days in advance
+        const advanceDays = availabilities[0].selectione_les_jours_a_la_vance || 0;
+        if (advanceDays > 0) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const diffTime = dObj.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays > advanceDays) {
+                return res.status(200).json({ 
+                    success: true, 
+                    data: [], 
+                    message: `Réservation autorisée uniquement jusqu'à ${advanceDays} jours à l'avance.` 
+                });
+            }
+        }
 
         let allSlots = [];
         for (const avail of availabilities) {
@@ -271,6 +322,16 @@ export const getAvailableSlots = async (req, res) => {
              AND status NOT IN ('annulé', 'absent')`,
             [doctorId, date]
         );
+
+        // 2. Check max appointments per day
+        const maxPerDay = availabilities[0].selectione_les_number_of_appoi_by_day || 0;
+        if (maxPerDay > 0 && booked.length >= maxPerDay) {
+            return res.status(200).json({ 
+                success: true, 
+                data: [], 
+                message: "Journée complète (Nombre maximum de rendez-vous atteint)." 
+            });
+        }
 
         const available = allSlots.filter(slot => {
             const [h, m] = slot.split(':').map(Number);

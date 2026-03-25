@@ -194,24 +194,24 @@ export const signIn = async (req, res) => {
             success: true,
             message: 'Connexion réussie',
             data: {
-                doctorId:        doctor.id,
-                firstName:       doctor.firstname,
-                lastName:        doctor.lastname,
-                phone:           doctor.phone,
-                specialty:       doctor.specialty      || '',
-                specialtyId:     doctor.speciality_id  || null,
-                bio:             doctor.bio            || '',
-                imgUrl:          doctor.img_url        || '',
-                isVerified:      doctor.is_verified === 1,
-                cabinetId:       doctor.cabinet_id     || null,
-                cabinetName:     doctor.cabinet_name   || '',
-                cabinetAddress:  doctor.cabinet_address|| '',
-                wilayaId:        doctor.wilaya_id      || null,
-                wilaya:          doctor.wilaya         || '',
-                communId:        doctor.commun_id      || null,
-                commune:         doctor.commune        || '',
-                onlineBooking:   doctor.is_reservation_online === 1,
-                createdAt:       doctor.created_at,
+                doctorId: doctor.id,
+                firstName: doctor.firstname,
+                lastName: doctor.lastname,
+                phone: doctor.phone,
+                specialty: doctor.specialty || '',
+                specialtyId: doctor.speciality_id || null,
+                bio: doctor.bio || '',
+                imgUrl: doctor.img_url || '',
+                isVerified: doctor.is_verified === 1,
+                cabinetId: doctor.cabinet_id || null,
+                cabinetName: doctor.cabinet_name || '',
+                cabinetAddress: doctor.cabinet_address || '',
+                wilayaId: doctor.wilaya_id || null,
+                wilaya: doctor.wilaya || '',
+                communId: doctor.commun_id || null,
+                commune: doctor.commune || '',
+                onlineBooking: doctor.is_reservation_online === 1,
+                createdAt: doctor.created_at,
                 token
             }
         });
@@ -269,24 +269,26 @@ export const getCurrentDoctor = async (req, res) => {
         }
 
         const [availabilities] = await pool.query(
-            'SELECT day_of_week, start_time, end_time FROM availability WHERE doctor_id = ?',
+            'SELECT day_of_week, start_time, end_time, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ?',
             [doctorId]
         );
 
         const schedule = {
-            sunday:    { isOpen: false, slots: [] },
-            monday:    { isOpen: false, slots: [] },
-            tuesday:   { isOpen: false, slots: [] },
+            sunday: { isOpen: false, slots: [] },
+            monday: { isOpen: false, slots: [] },
+            tuesday: { isOpen: false, slots: [] },
             wednesday: { isOpen: false, slots: [] },
-            thursday:  { isOpen: false, slots: [] },
-            friday:    { isOpen: false, slots: [] },
-            saturday:  { isOpen: false, slots: [] }
+            thursday: { isOpen: false, slots: [] },
+            friday: { isOpen: false, slots: [] },
+            saturday: { isOpen: false, slots: [] }
         };
 
         availabilities.forEach(av => {
             const day = av.day_of_week.toLowerCase();
             if (schedule[day]) {
                 schedule[day].isOpen = true;
+                schedule[day].advanceBookingDays = av.selectione_les_jours_a_la_vance || 0;
+                schedule[day].maxAppointmentsPerDay = av.selectione_les_number_of_appoi_by_day || 0;
                 schedule[day].slots.push({
                     start: av.start_time.substring(0, 5),
                     end: av.end_time.substring(0, 5)
@@ -297,25 +299,25 @@ export const getCurrentDoctor = async (req, res) => {
         res.status(200).json({
             success: true,
             data: {
-                doctorId:       d.id,
-                firstName:      d.firstname,
-                lastName:       d.lastname,
-                phone:          d.phone,
-                specialty:      d.specialty      || '',
-                specialtyId:    d.speciality_id  || null,
-                bio:            d.bio            || '',
-                imgUrl:         d.img_url        || '',
-                isVerified:     d.is_verified === 1,
-                cabinetId:      d.cabinet_id     || null,
-                cabinetName:    d.cabinet_name   || '',
-                cabinetAddress: d.cabinet_address|| '',
-                wilayaId:       d.wilaya_id      || null,
-                wilaya:         d.wilaya         || '',
-                communId:       d.commun_id      || null,
-                commune:        d.commune        || '',
-                onlineBooking:  d.is_reservation_online === 1,
-                schedule:       schedule,
-                createdAt:      d.created_at
+                doctorId: d.id,
+                firstName: d.firstname,
+                lastName: d.lastname,
+                phone: d.phone,
+                specialty: d.specialty || '',
+                specialtyId: d.speciality_id || null,
+                bio: d.bio || '',
+                imgUrl: d.img_url || '',
+                isVerified: d.is_verified === 1,
+                cabinetId: d.cabinet_id || null,
+                cabinetName: d.cabinet_name || '',
+                cabinetAddress: d.cabinet_address || '',
+                wilayaId: d.wilaya_id || null,
+                wilaya: d.wilaya || '',
+                communId: d.commun_id || null,
+                commune: d.commune || '',
+                onlineBooking: d.is_reservation_online === 1,
+                schedule: schedule,
+                createdAt: d.created_at
             }
         });
 
@@ -416,17 +418,17 @@ export const patientSignIn = async (req, res) => {
             success: true,
             token,
             patient: {
-                id:         user.id,
-                firstName:  user.firstname,
-                lastName:   user.lastname,
-                phone:      user.phone,
-                address:    user.address,
-                birthDate:  user.birthdate,
-                gender:     user.gender,
-                wilayaId:   user.wilaya_id,
-                wilaya:     user.wilaya_name,
-                communId:   user.commun_id,
-                commune:    user.commun_name,
+                id: user.id,
+                firstName: user.firstname,
+                lastName: user.lastname,
+                phone: user.phone,
+                address: user.address,
+                birthDate: user.birthdate,
+                gender: user.gender,
+                wilayaId: user.wilaya_id,
+                wilaya: user.wilaya_name,
+                communId: user.commun_id,
+                commune: user.commun_name,
                 isVerified: user.is_verified === 1
             }
         });
