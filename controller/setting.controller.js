@@ -79,11 +79,15 @@ const syncAvailabilities = async (connection, doctorId, schedule, slotDuration =
 
         for (const slot of slots) {
             if (slot.start && slot.end) {
-                await connection.query(
-                    `INSERT INTO availability (doctor_id, day_of_week, start_time, end_time, slot_duration)
-                     VALUES (?, ?, ?, ?, ?)`,
-                    [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration]
-                );
+                try {
+                    await connection.query(
+                        `INSERT INTO availability (doctor_id, day_of_week, start_time, end_time, slot_duration)
+                         VALUES (?, ?, ?, ?, ?)`,
+                        [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration]
+                    );
+                } catch (err) {
+                    console.error(`Failed to insert availability for ${dbDay}:`, err.message);
+                }
             }
         }
     }
