@@ -2,10 +2,6 @@ import puppeteer from "puppeteer";
 import { v2 as cloudinary } from "cloudinary";
 import pool from "../database.js";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -43,109 +39,41 @@ const buildPrescriptionHTML = ({
     <html>
       <head>
         <style>
-          body {
-            font-family: Arial, sans-serif;
-            padding: 40px;
-            color: #2c3e50;
-          }
-          .header {
-            text-align: center;
-            border-bottom: 2px solid #2c3e50;
-            padding-bottom: 15px;
-            margin-bottom: 30px;
-          }
-          .doctor-name {
-            font-size: 22px;
-            font-weight: bold;
-          }
-          .specialty {
-            font-size: 14px;
-            color: gray;
-          }
-          .section {
-            margin-bottom: 20px;
-          }
-          .patient-box {
-            background: #f4f6f9;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 25px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-          }
-          th {
-            background: #2c3e50;
-            color: white;
-            padding: 10px;
-            font-size: 13px;
-          }
-          td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            font-size: 13px;
-            text-align: center;
-          }
-          .footer {
-            margin-top: 60px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-          }
-          .signature {
-            text-align: right;
-          }
-          .date {
-            font-weight: bold;
-          }
-          .watermark {
-            position: fixed;
-            top: 40%;
-            left: 25%;
-            font-size: 80px;
-            color: rgba(200,200,200,0.1);
-            transform: rotate(-30deg);
-            z-index: -1;
-          }
+          body { font-family: Arial, sans-serif; padding: 40px; color: #2c3e50; }
+          .header { text-align: center; border-bottom: 2px solid #2c3e50; padding-bottom: 15px; margin-bottom: 30px; }
+          .doctor-name { font-size: 22px; font-weight: bold; }
+          .specialty { font-size: 14px; color: gray; }
+          .patient-box { background: #f4f6f9; padding: 15px; border-radius: 8px; margin-bottom: 25px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { background: #2c3e50; color: white; padding: 10px; font-size: 13px; }
+          td { border: 1px solid #ddd; padding: 8px; font-size: 13px; text-align: center; }
+          .footer { margin-top: 60px; display: flex; justify-content: space-between; font-size: 14px; }
+          .signature { text-align: right; }
+          .date { font-weight: bold; }
         </style>
       </head>
       <body>
-        <div class="watermark">ORDONNANCE</div>
-
         <div class="header">
           <div class="doctor-name">${doctorName}</div>
           <div class="specialty">${doctorSpecialty}</div>
         </div>
-
         <div class="patient-box">
           <strong>Patient:</strong> ${patientName} <br/>
           <strong>Age:</strong> ${patientAge} <br/>
-          <strong>Address:</strong> ${patientAddress} <br/>
+          <strong>Adresse:</strong> ${patientAddress} <br/>
           <strong>Date:</strong> <span class="date">${prescriptionDate}</span>
         </div>
-
         <div class="section">
           <h3>Prescription</h3>
           <table>
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Medication</th>
-                <th>Dosage</th>
-                <th>Frequency</th>
-                <th>Duration</th>
-              </tr>
+              <tr><th>#</th><th>Médicament</th><th>Dosage</th><th>Fréquence</th><th>Durée</th></tr>
             </thead>
-            <tbody>
-              ${medicinesRows}
-            </tbody>
+            <tbody>${medicinesRows}</tbody>
           </table>
         </div>
-
         <div class="footer">
-          <div>Doctor Signature</div>
+          <div>Signature du Médecin</div>
           <div class="signature">${doctorName}</div>
         </div>
       </body>
@@ -153,15 +81,10 @@ const buildPrescriptionHTML = ({
   `;
 };
 
-
 const generatePdfBuffer = async (htmlContent) => {
   const browser = await puppeteer.launch({
     headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage"
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage();
   await page.setContent(htmlContent);
@@ -172,159 +95,82 @@ const generatePdfBuffer = async (htmlContent) => {
 
 const uploadToCloudinary = (pdfBuffer) =>
   new Promise((resolve, reject) => {
-    const buffer = Buffer.from(pdfBuffer);
-
-    cloudinary.uploader
-      .upload_stream(
-        {
-          folder: "doctorapp/prescriptions",
-          resource_type: "raw",
-          format: "pdf",
-          type: "upload",
-          access_mode: "public",
-        },
-        (error, result) => {
-          if (error) {
-            console.error("Cloudinary Upload Error:", error);
-            reject(error);
-          } else {
-            console.log("Cloudinary Upload Success:", result.secure_url);
-            resolve(result);
-          }
-        }
-      )
-      .end(buffer);
+    cloudinary.uploader.upload_stream(
+      {
+        folder: "doctorapp/prescriptions",
+        resource_type: "raw",
+        format: "pdf",
+        type: "upload",
+        access_mode: "public",
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    ).end(pdfBuffer);
   });
-
 
 const extractPublicId = (url) => url.split("/").pop().split(".")[0];
 
 export const getOrdonnancesByPatientId = async (req, res) => {
   try {
     const { patient_id } = req.params;
-    const doctor_id = req.doctor.doctorId;
-
     const [rows] = await pool.query(
-      `SELECT * FROM prescriptions WHERE patient_id = ? AND doctor_id = ? ORDER BY created_at DESC`,
-      [patient_id, doctor_id]
+      `SELECT * FROM ordonnance WHERE patient_id = ? AND doctor_id = ? ORDER BY created_at DESC`,
+      [patient_id, req.doctor.doctorId]
     );
-
     res.status(200).json({ success: true, data: rows });
   } catch (error) {
-    console.error("Get ordonnances by ID error:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve ordonnances" });
+    res.status(500).json({ success: false, message: "Erreur lors de la récupération", error: error.message });
   }
 };
 
 export const getOrdonnancesByDoctor = async (req, res) => {
   try {
-    const { doctor_id: paramId } = req.params;
-    const doctor_id = req.doctor.doctorId;
-
-    if (paramId && parseInt(paramId, 10) !== doctor_id) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to view other doctor's ordonnances",
-      });
-    }
-
     const [rows] = await pool.query(
-      `SELECT * FROM prescriptions WHERE doctor_id = ? ORDER BY created_at DESC`,
-      [doctor_id]
+      `SELECT * FROM ordonnance WHERE doctor_id = ? ORDER BY created_at DESC`,
+      [req.doctor.doctorId]
     );
-
     res.status(200).json({ success: true, data: rows });
   } catch (error) {
-    console.error("Get ordonnances error:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve ordonnances" });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
 export const createOrdonnance = async (req, res) => {
   try {
     const {
-      appointment_id,
-      patient_id,
-      patientName,
-      patientAddress,
-      patientAge,
-      prescriptionDate,
-      doctorName,
-      doctorSpecialty,
-      medicaments,
+      appointment_id, patient_id, patientName, patientAddress, patientAge,
+      prescriptionDate, doctorName, doctorSpecialty, medicaments,
     } = req.body;
-
     const doctor_id = req.doctor.doctorId;
 
-    // VALIDATION: Ensure required IDs for the prescriptions table are present
     if (!appointment_id || !patient_id) {
-      console.error("Missing required IDs in createOrdonnance:", { appointment_id, patient_id });
-      return res.status(400).json({
-        success: false,
-        message: "L'ID du rendez-vous et l'ID du patient sont obligatoires."
-      });
+      return res.status(400).json({ success: false, message: "ID du rendez-vous et ID du patient obligatoires." });
     }
 
     const html = buildPrescriptionHTML({
-      doctorName,
-      doctorSpecialty,
-      patientName,
-      patientAge,
-      patientAddress,
-      prescriptionDate,
-      medicaments,
+      doctorName, doctorSpecialty, patientName, patientAge,
+      patientAddress, prescriptionDate, medicaments,
     });
 
     const pdfBuffer = await generatePdfBuffer(html);
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
-    // Fetch patient_user_id from the appointment so the patient portal can retrieve this prescription
-    const [appointmentRows] = await pool.query(
-      `SELECT patient_user_id FROM appointments WHERE id = ? AND doctor_id = ?`,
-      [appointment_id, doctor_id]
-    );
-    if (appointmentRows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: "Rendez-vous introuvable ou non autorisé."
-      });
-    }
-    let patient_user_id = appointmentRows[0].patient_user_id;
-
-    if (!patient_user_id) {
-      // Fix: Hidden Prescriptions Bug
-      // If the appointment didn't have the patient_user_id, try to find it via phone number
-      const [patientRows] = await pool.query('SELECT phone FROM patients WHERE id = ?', [patient_id]);
-      if (patientRows.length > 0 && patientRows[0].phone) {
-        const [userRows] = await pool.query('SELECT id FROM patient_users WHERE phone = ?', [patientRows[0].phone]);
-        if (userRows.length > 0) {
-          patient_user_id = userRows[0].id;
-          
-          // Also retroactively fix the appointment while we're here
-          await pool.query('UPDATE appointments SET patient_user_id = ? WHERE id = ?', [patient_user_id, appointment_id]);
-        }
-      }
-    }
-
     const [result] = await pool.query(
-      `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id, cloudinary_url, medicaments, patient_user_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [appointment_id, doctor_id, patient_id, uploadResult.secure_url, JSON.stringify(medicaments), patient_user_id]
+      `INSERT INTO ordonnance (appointment_id, doctor_id, patient_id, file_url, medicaments)
+       VALUES (?, ?, ?, ?, ?)`,
+      [appointment_id, doctor_id, patient_id, uploadResult.secure_url, JSON.stringify(medicaments)]
     );
 
     res.status(201).json({
       success: true,
-      message: "Ordonnance created successfully",
+      message: "Ordonnance créée avec succès",
       url: uploadResult.secure_url,
       id: result.insertId
     });
   } catch (error) {
-    console.error("Create ordonnance internal error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to create ordonnance",
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: "Échec de création", error: error.message });
   }
 };
 
@@ -334,31 +180,19 @@ export const deleteOrdonnance = async (req, res) => {
     const doctor_id = req.doctor.doctorId;
 
     const [rows] = await pool.query(
-      `SELECT cloudinary_url FROM prescriptions WHERE id = ? AND doctor_id = ?`,
+      `SELECT file_url FROM ordonnance WHERE id = ? AND doctor_id = ?`,
       [id, doctor_id]
     );
 
-    if (rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Ordonnance not found or unauthorized",
-      });
-    }
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Ordonnance non trouvée" });
 
-    const publicId = extractPublicId(rows[0].cloudinary_url);
-    await cloudinary.uploader.destroy(`doctorapp/prescriptions/${publicId}`, {
-      resource_type: "raw",
-    });
+    const publicId = extractPublicId(rows[0].file_url);
+    await cloudinary.uploader.destroy(`doctorapp/prescriptions/${publicId}`, { resource_type: "raw" });
 
-    await pool.query(
-      `DELETE FROM prescriptions WHERE id = ? AND doctor_id = ?`,
-      [id, doctor_id]
-    );
-
-    res.status(200).json({ success: true, message: "Ordonnance deleted successfully" });
+    await pool.query(`DELETE FROM ordonnance WHERE id = ? AND doctor_id = ?`, [id, doctor_id]);
+    res.status(200).json({ success: true, message: "Supprimée" });
   } catch (error) {
-    console.error("Delete ordonnance error:", error);
-    res.status(500).json({ success: false, message: "Failed to delete ordonnance" });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
@@ -366,62 +200,33 @@ export const updateOrdonnance = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      patientName,
-      patientAddress,
-      patientAge,
-      prescriptionDate,
-      doctorName,
-      doctorSpecialty,
-      medicaments,
+      patientName, patientAddress, patientAge, prescriptionDate,
+      doctorName, doctorSpecialty, medicaments,
     } = req.body;
-
     const doctor_id = req.doctor.doctorId;
 
-    const [rows] = await pool.query(
-      `SELECT * FROM prescriptions WHERE id = ? AND doctor_id = ?`,
-      [id, doctor_id]
-    );
+    const [rows] = await pool.query(`SELECT * FROM ordonnance WHERE id = ? AND doctor_id = ?`, [id, doctor_id]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Ordonnance non trouvée" });
 
-    if (rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Ordonnance not found or unauthorized",
-      });
-    }
+    const oldPublicId = extractPublicId(rows[0].file_url);
+    await cloudinary.uploader.destroy(`doctorapp/prescriptions/${oldPublicId}`, { resource_type: "raw" });
 
-    // Delete old PDF from Cloudinary
-    const oldPublicId = extractPublicId(rows[0].cloudinary_url);
-    await cloudinary.uploader.destroy(`doctorapp/prescriptions/${oldPublicId}`, {
-      resource_type: "raw",
-    });
-
-    // Generate and upload new PDF
     const html = buildPrescriptionHTML({
-      doctorName,
-      doctorSpecialty,
-      patientName,
-      patientAge,
-      patientAddress,
-      prescriptionDate,
-      medicaments,
+      doctorName, doctorSpecialty, patientName, patientAge,
+      patientAddress, prescriptionDate, medicaments,
     });
 
     const pdfBuffer = await generatePdfBuffer(html);
     const uploadResult = await uploadToCloudinary(pdfBuffer);
 
-
     await pool.query(
-      `UPDATE prescriptions SET cloudinary_url = ?, medicaments = ? WHERE id = ?`,
-      [uploadResult.secure_url, JSON.stringify(medicaments), id]
+      `UPDATE ordonnance SET file_url = ?, medicaments = ? WHERE id = ? AND doctor_id = ?`,
+      [uploadResult.secure_url, JSON.stringify(medicaments), id, doctor_id]
     );
 
-    res.status(200).json({
-      success: true,
-      message: "Ordonnance updated successfully",
-      url: uploadResult.secure_url,
-    });
+    res.status(200).json({ success: true, message: "Mise à jour effectuée", url: uploadResult.secure_url });
   } catch (error) {
-    console.error("Update ordonnance error:", error);
-    res.status(500).json({ success: false, message: "Failed to update ordonnance" });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
+

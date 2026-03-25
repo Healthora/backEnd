@@ -1,10 +1,24 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../database.js';
-import crypto from 'crypto';
-import { sendResetEmail, sendPatientResetEmail } from '../utils/email.js';
 
-export const signUp = async (req, res, next) => {
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+const signToken = (payload, expiresIn = process.env.JWT_EXPIRES_IN || '7d') =>
+    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+
+const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+// ─── DOCTOR AUTH ──────────────────────────────────────────────────────────────
+
+/**
+ * POST /auth/signup
+ * New schema:
+ *  - table: doctor (firstname, lastname, phone, password, is_reservation_online)
+ *  - specialty via doctor_speciality join table
+ *  - cabinet stores wilaya_id and commun_id as foreign keys (not strings)
+ */
+export const signUp = async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -12,36 +26,24 @@ export const signUp = async (req, res, next) => {
         const {
             firstName,
             lastName,
-            email,
-            password,
             phone,
-            specialty,
+            password,
+            specialtyId,
             cabinetName,
-            wilaya,
-            commune,
-            cabinetAddress,
-            schedule
+            wilayaId,
+            communId,
+            cabinetAddress
         } = req.body;
 
-        // Validation des champs requis
-        if (!firstName || !lastName || !email || !password || !phone || !cabinetName || !wilaya || !commune || !cabinetAddress) {
+        // Required field validation
+        if (!firstName || !lastName || !phone || !password || !cabinetName || !wilayaId || !communId || !cabinetAddress) {
             return res.status(400).json({
                 success: false,
                 message: 'Tous les champs obligatoires doivent être remplis'
             });
         }
 
-        // Validation du format email
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Format d\'email invalide'
-            });
-        }
-
-        // Validation du mot de passe
-        const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+        // Password strength
         if (!passwordRegex.test(password)) {
             return res.status(400).json({
                 success: false,
@@ -49,193 +51,173 @@ export const signUp = async (req, res, next) => {
             });
         }
 
-        // Vérifier si l'email existe déjà
-        const [existingDoctors] = await connection.query(
-            'SELECT id FROM doctors WHERE email = ?',
-            [email]
+        // Phone uniqueness check
+        const [existing] = await connection.query(
+            'SELECT id FROM doctor WHERE phone = ?', [phone]
         );
-
-        if (existingDoctors.length > 0) {
+        if (existing.length > 0) {
             return res.status(409).json({
                 success: false,
-                message: 'Cet email est déjà utilisé'
+                message: 'Ce numéro de téléphone est déjà utilisé'
             });
         }
 
-        // Hash du mot de passe
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
+        const passwordHash = await bcrypt.hash(password, 10);
 
-        // Créer le médecin
-        const [result] = await connection.query(
-            `INSERT INTO doctors 
-            (email, password, first_name, last_name, phone, specialty) 
-            VALUES (?, ?, ?, ?, ?, ?)`,
-            [email, passwordHash, firstName, lastName, phone, specialty]
+        // Insert doctor (new field names)
+        const [doctorResult] = await connection.query(
+            `INSERT INTO doctor (firstname, lastname, phone, password, is_reservation_online)
+             VALUES (?, ?, ?, ?, 0)`,
+            [firstName, lastName, phone, passwordHash]
         );
+        const doctorId = doctorResult.insertId;
 
-        const doctorId = result.insertId;
+        // Link specialty via doctor_speciality
+        if (specialtyId) {
+            await connection.query(
+                `INSERT INTO doctor_speciality (doctor_id, speciality_id) VALUES (?, ?)`,
+                [doctorId, specialtyId]
+            );
+        }
 
-        // Structure par défaut si le planning n'est pas fourni
-        const defaultSchedule = {
-            monday: { isOpen: true, start: "09:00", end: "17:00" },
-            tuesday: { isOpen: true, start: "09:00", end: "17:00" },
-            wednesday: { isOpen: true, start: "09:00", end: "12:00" },
-            thursday: { isOpen: true, start: "09:00", end: "17:00" },
-            friday: { isOpen: true, start: "09:00", end: "17:00" },
-            saturday: { isOpen: false, start: "09:00", end: "12:00" },
-            sunday: { isOpen: false, start: "", end: "" }
-        };
-
-        // Créer le cabinet avec le planning
+        // Insert cabinet with FK ids (not string names)
         await connection.query(
-            `INSERT INTO cabinets (doctor_id, name, wilaya, commune, address, schedule) VALUES (?, ?, ?, ?, ?, ?)`,
-            [doctorId, cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule || defaultSchedule)]
+            `INSERT INTO cabinet (doctor_id, name, wilaya_id, commun_id, address)
+             VALUES (?, ?, ?, ?, ?)`,
+            [doctorId, cabinetName, wilayaId, communId, cabinetAddress]
         );
 
         await connection.commit();
 
-        // Générer un token JWT
-        const token = jwt.sign(
-            {
-                doctorId: doctorId,
-                email: email
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+        // Fetch names for response
+        let specialtyName = '';
+        if (specialtyId) {
+            const [sp] = await pool.query('SELECT name FROM speciality WHERE id = ?', [specialtyId]);
+            specialtyName = sp[0]?.name || '';
+        }
+        const [wRow] = await pool.query('SELECT name FROM wilaya WHERE id = ?', [wilayaId]);
+        const [cRow] = await pool.query('SELECT name FROM commun WHERE id = ?', [communId]);
+
+        const token = signToken({ doctorId, phone });
 
         res.status(201).json({
             success: true,
             message: 'Compte créé avec succès',
             data: {
-                doctorId: doctorId,
-                email: email,
-                firstName: firstName,
-                lastName: lastName,
-                phone: phone,
-                specialty: specialty,
-                cabinetName: cabinetName,
-                wilaya: wilaya,
-                commune: commune,
-                cabinetAddress: cabinetAddress,
-                schedule: schedule || defaultSchedule,
-                token: token
+                doctorId,
+                firstName,
+                lastName,
+                phone,
+                specialty: specialtyName,
+                specialtyId: specialtyId ? parseInt(specialtyId) : null,
+                cabinetName,
+                wilayaId: parseInt(wilayaId),
+                wilaya: wRow[0]?.name || '',
+                communId: parseInt(communId),
+                commune: cRow[0]?.name || '',
+                cabinetAddress,
+                onlineBooking: false,
+                token
             }
         });
 
     } catch (error) {
-        if (connection) await connection.rollback();
-        console.error('Erreur lors de l\'inscription:', error);
+        await connection.rollback();
+        console.error('Signup error:', error);
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la création du compte',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     } finally {
-        if (connection) connection.release();
+        connection.release();
     }
 };
 
-
-export const signIn = async (req, res, next) => {
+/**
+ * POST /auth/signin
+ * Phone-only auth (no email in new doctor table).
+ */
+export const signIn = async (req, res) => {
     try {
-        const { identifier, password } = req.body;
+        const { phone, password } = req.body;
 
-        // Validation des champs
-        if (!identifier || !password) {
+        if (!phone || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Email ou Téléphone et mot de passe requis'
+                message: 'Téléphone et mot de passe requis'
             });
         }
 
-        // Récupérer le médecin
         const [doctors] = await pool.query(
-            `SELECT 
-                d.id, 
-                d.email, 
-                d.password, 
-                d.first_name, 
-                d.last_name,
-                d.phone,
-                d.specialty as specialty_id,
-                d.bio,
-                d.img_url,
-                d.is_reservation_online,
-                d.consultation_duration,
-                d.created_at,
-                c.name as cabinet_name,
-                c.wilaya,
-                c.commune,
-                c.address as cabinet_address,
-                c.id as cabinet_id,
-                c.schedule as cabinet_schedule,
-                s.name as specialty
-            FROM doctors d
-            LEFT JOIN cabinets c ON d.id = c.doctor_id
-            LEFT JOIN speciality s ON d.specialty = s.id
-            WHERE d.email = ? OR d.phone = ?`,
-            [identifier, identifier]
+            `SELECT
+                d.id, d.firstname, d.lastname, d.phone, d.password,
+                d.is_reservation_online, d.bio, d.img_url, d.is_verified, d.created_at,
+                ds.speciality_id,
+                s.name  AS specialty,
+                c.id    AS cabinet_id,
+                c.name  AS cabinet_name,
+                c.address AS cabinet_address,
+                c.wilaya_id,
+                w.name  AS wilaya,
+                c.commun_id,
+                cm.name AS commune
+            FROM doctor d
+            LEFT JOIN doctor_speciality ds ON d.id = ds.doctor_id
+            LEFT JOIN speciality s         ON ds.speciality_id = s.id
+            LEFT JOIN cabinet c            ON d.id = c.doctor_id
+            LEFT JOIN wilaya w             ON c.wilaya_id = w.id
+            LEFT JOIN commun cm            ON c.commun_id = cm.id
+            WHERE d.phone = ?`,
+            [phone]
         );
-
 
         if (doctors.length === 0) {
             return res.status(401).json({
                 success: false,
-                message: 'Email/Téléphone ou mot de passe incorrect'
+                message: 'Téléphone ou mot de passe incorrect'
             });
         }
 
         const doctor = doctors[0];
-
-        // Vérifier le mot de passe
-        const isPasswordValid = await bcrypt.compare(password, doctor.password);
-
-        if (!isPasswordValid) {
+        const isValid = await bcrypt.compare(password, doctor.password);
+        if (!isValid) {
             return res.status(401).json({
                 success: false,
-                message: 'Email/Téléphone ou mot de passe incorrect'
+                message: 'Téléphone ou mot de passe incorrect'
             });
         }
 
-        // Générer un token JWT
-        const token = jwt.sign(
-            {
-                doctorId: doctor.id,
-                email: doctor.email
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+        const token = signToken({ doctorId: doctor.id, phone: doctor.phone });
 
         res.status(200).json({
             success: true,
             message: 'Connexion réussie',
             data: {
-                doctorId: doctor.id,
-                email: doctor.email,
-                firstName: doctor.first_name,
-                lastName: doctor.last_name,
-                phone: doctor.phone,
-                specialty: doctor.specialty,
-                bio: doctor.bio,
-                imgUrl: doctor.img_url || '',
-                cabinetName: doctor.cabinet_name,
-                cabinetAddress: doctor.cabinet_address,
-                cabinetId: doctor.cabinet_id,
-                onlineBooking: doctor.is_reservation_online === 1,
-                consultationDuration: doctor.consultation_duration || 30,
-                schedule: typeof doctor.cabinet_schedule === 'string'
-                    ? JSON.parse(doctor.cabinet_schedule)
-                    : doctor.cabinet_schedule,
-                createdAt: doctor.created_at,
-                token: token
+                doctorId:        doctor.id,
+                firstName:       doctor.firstname,
+                lastName:        doctor.lastname,
+                phone:           doctor.phone,
+                specialty:       doctor.specialty      || '',
+                specialtyId:     doctor.speciality_id  || null,
+                bio:             doctor.bio            || '',
+                imgUrl:          doctor.img_url        || '',
+                isVerified:      doctor.is_verified === 1,
+                cabinetId:       doctor.cabinet_id     || null,
+                cabinetName:     doctor.cabinet_name   || '',
+                cabinetAddress:  doctor.cabinet_address|| '',
+                wilayaId:        doctor.wilaya_id      || null,
+                wilaya:          doctor.wilaya         || '',
+                communId:        doctor.commun_id      || null,
+                commune:         doctor.commune        || '',
+                onlineBooking:   doctor.is_reservation_online === 1,
+                createdAt:       doctor.created_at,
+                token
             }
         });
 
     } catch (error) {
-        console.error('Erreur lors de la connexion:', error);
+        console.error('Signin error:', error);
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la connexion',
@@ -244,94 +226,76 @@ export const signIn = async (req, res, next) => {
     }
 };
 
-
-export const signOut = async (req, res, next) => {
-    try {
-        res.status(200).json({
-            success: true,
-            message: 'Déconnexion réussie'
-        });
-
-    } catch (error) {
-        console.error('Erreur lors de la déconnexion:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur lors de la déconnexion',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
+/**
+ * POST /auth/signout
+ */
+export const signOut = async (req, res) => {
+    res.status(200).json({ success: true, message: 'Déconnexion réussie' });
 };
 
-
-export const getCurrentDoctor = async (req, res, next) => {
+/**
+ * GET /auth/me
+ * Returns current doctor profile.
+ */
+export const getCurrentDoctor = async (req, res) => {
     try {
         const doctorId = req.doctor.doctorId;
 
         const [doctors] = await pool.query(
-            `SELECT 
-                d.id, 
-                d.email, 
-                d.first_name, 
-                d.last_name,
-                d.phone,
-                d.specialty as specialty_id,
-                d.bio,
-                d.img_url,
-                d.is_reservation_online,
-                d.consultation_duration,
-                d.created_at,
-                d.updated_at,
-                c.name as cabinet_name,
-                c.wilaya,
-                c.commune,
-                c.address as cabinet_address,
-                c.id as cabinet_id,
-                c.schedule as cabinet_schedule,
-                s.name as specialty
-            FROM doctors d
-            LEFT JOIN cabinets c ON d.id = c.doctor_id
-            LEFT JOIN speciality s ON d.specialty = s.id
+            `SELECT
+                d.id, d.firstname, d.lastname, d.phone,
+                d.is_reservation_online, d.bio, d.img_url, d.is_verified, d.created_at,
+                ds.speciality_id,
+                s.name  AS specialty,
+                c.id    AS cabinet_id,
+                c.name  AS cabinet_name,
+                c.address AS cabinet_address,
+                c.wilaya_id,
+                w.name  AS wilaya,
+                c.commun_id,
+                cm.name AS commune
+            FROM doctor d
+            LEFT JOIN doctor_speciality ds ON d.id = ds.doctor_id
+            LEFT JOIN speciality s         ON ds.speciality_id = s.id
+            LEFT JOIN cabinet c            ON d.id = c.doctor_id
+            LEFT JOIN wilaya w             ON c.wilaya_id = w.id
+            LEFT JOIN commun cm            ON c.commun_id = cm.id
             WHERE d.id = ?`,
             [doctorId]
         );
 
         if (doctors.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Médecin non trouvé'
-            });
+            return res.status(404).json({ success: false, message: 'Médecin non trouvé' });
         }
 
-        const doctor = doctors[0];
+        const d = doctors[0];
 
         res.status(200).json({
             success: true,
             data: {
-                doctorId: doctor.id,
-                email: doctor.email,
-                firstName: doctor.first_name,
-                lastName: doctor.last_name,
-                phone: doctor.phone,
-                specialty: doctor.specialty,
-                bio: doctor.bio,
-                imgUrl: doctor.img_url || '',
-                createdAt: doctor.created_at,
-                updatedAt: doctor.updated_at,
-                cabinetName: doctor.cabinet_name,
-                wilaya: doctor.wilaya,
-                commune: doctor.commune,
-                cabinetAddress: doctor.cabinet_address,
-                cabinetId: doctor.cabinet_id,
-                onlineBooking: doctor.is_reservation_online === 1,
-                consultationDuration: doctor.consultation_duration || 30,
-                schedule: typeof doctor.cabinet_schedule === 'string'
-                    ? JSON.parse(doctor.cabinet_schedule)
-                    : doctor.cabinet_schedule
+                doctorId:       d.id,
+                firstName:      d.firstname,
+                lastName:       d.lastname,
+                phone:          d.phone,
+                specialty:      d.specialty      || '',
+                specialtyId:    d.speciality_id  || null,
+                bio:            d.bio            || '',
+                imgUrl:         d.img_url        || '',
+                isVerified:     d.is_verified === 1,
+                cabinetId:      d.cabinet_id     || null,
+                cabinetName:    d.cabinet_name   || '',
+                cabinetAddress: d.cabinet_address|| '',
+                wilayaId:       d.wilaya_id      || null,
+                wilaya:         d.wilaya         || '',
+                communId:       d.commun_id      || null,
+                commune:        d.commune        || '',
+                onlineBooking:  d.is_reservation_online === 1,
+                createdAt:      d.created_at
             }
         });
 
     } catch (error) {
-        console.error('Erreur lors de la récupération du médecin:', error);
+        console.error('getCurrentDoctor error:', error);
         res.status(500).json({
             success: false,
             message: 'Erreur serveur',
@@ -340,129 +304,21 @@ export const getCurrentDoctor = async (req, res, next) => {
     }
 };
 
+// ─── PATIENT AUTH ─────────────────────────────────────────────────────────────
+
+/**
+ * POST /auth/patient/signup
+ * Table: patient (was patient_users)
+ * Fields: firstname, lastname, birthdate (no email)
+ */
 export const patientSignUp = async (req, res) => {
     try {
-        const { firstName, lastName, email, password, phone, address, birthDate, gender, wilaya, commune } = req.body;
+        const { firstName, lastName, phone, password, address, birthDate, gender, wilayaId, communId } = req.body;
 
-        if (!firstName || !lastName || !email || !password) {
+        if (!firstName || !lastName || !phone || !password) {
             return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
         }
 
-        const [existing] = await pool.query('SELECT id FROM patient_users WHERE email = ?', [email]);
-        if (existing.length > 0) {
-            return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé' });
-        }
-
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
-
-        const [result] = await pool.query(
-            `INSERT INTO patient_users (email, password, first_name, last_name, phone, address, birth_date, gender, wilaya, commune) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [email, passwordHash, firstName, lastName, phone, address, birthDate, gender || 'M', wilaya, commune]
-        );
-
-        const newUserId = result.insertId;
-
-        if (phone) {
-            // Sychroniser les données existantes (Late Registration Bug)
-            await pool.query(
-                `UPDATE appointments a 
-                 JOIN patients p ON a.patient_id = p.id 
-                 SET a.patient_user_id = ? 
-                 WHERE p.phone = ?`,
-                [newUserId, phone]
-            );
-
-            await pool.query(
-                `UPDATE prescriptions pr 
-                 JOIN patients p ON pr.patient_id = p.id 
-                 SET pr.patient_user_id = ? 
-                 WHERE p.phone = ?`,
-                [newUserId, phone]
-            );
-        }
-
-        const token = jwt.sign(
-            { patientId: newUserId, email, role: 'patient' },
-            process.env.JWT_SECRET,
-            { expiresIn: '30d' }
-        );
-
-        res.status(201).json({
-            success: true,
-            message: 'Compte patient créé',
-            token,
-            patient: { id: newUserId, email, firstName, lastName, phone, wilaya, commune }
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Erreur serveur' });
-    }
-};
-
-export const forgotPassword = async (req, res) => {
-    try {
-        const { email } = req.body;
-        if (!email) {
-            return res.status(400).json({ success: false, message: 'Email requis' });
-        }
-
-        const [doctors] = await pool.query('SELECT id, email, first_name FROM doctors WHERE email = ?', [email]);
-
-        if (doctors.length === 0) {
-            // Always return success to avoid enumeration
-            return res.status(200).json({
-                success: true,
-                message: 'Si un compte existe avec cet e-mail, un lien de réinitialisation sera envoyé'
-            });
-        }
-
-        const doctor = doctors[0];
-        const token = crypto.randomBytes(32).toString('hex');
-        const expires = new Date();
-        expires.setHours(expires.getHours() + 1);
-
-        await pool.query(
-            'UPDATE doctors SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
-            [token, expires, doctor.id]
-        );
-
-        const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
-        const resetLink = `${frontendUrl}/reset-password/${token}`;
-
-        console.log('Sending reset email to:', doctor.email);
-
-        try {
-            await sendResetEmail(doctor.email, resetLink);
-            console.log('Reset email sent successfully to:', doctor.email);
-
-            res.status(200).json({
-                success: true,
-                message: 'E-mail de réinitialisation envoyé'
-            });
-        } catch (emailError) {
-            console.error('Failed to send reset email:', emailError);
-            return res.status(500).json({
-                success: false,
-                message: 'Le compte existe mais l\'envoi de l\'e-mail a échoué : ' + emailError.message
-            });
-        }
-    } catch (error) {
-        console.error('Forgot password error:', error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la demande' });
-    }
-};
-
-export const resetPassword = async (req, res) => {
-    try {
-        const { token, password } = req.body;
-        if (!token || !password) {
-            return res.status(400).json({ success: false, message: 'Données manquantes' });
-        }
-
-        // Add password validation
-        const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
         if (!passwordRegex.test(password)) {
             return res.status(400).json({
                 success: false,
@@ -470,34 +326,38 @@ export const resetPassword = async (req, res) => {
             });
         }
 
-        const [doctors] = await pool.query(
-            'SELECT id FROM doctors WHERE reset_token = ? AND reset_token_expires > NOW()',
-            [token]
-        );
-
-        if (doctors.length === 0) {
-            return res.status(400).json({ success: false, message: 'Lien invalide ou expiré' });
+        const [existing] = await pool.query('SELECT id FROM patient WHERE phone = ?', [phone]);
+        if (existing.length > 0) {
+            return res.status(409).json({ success: false, message: 'Ce numéro est déjà utilisé' });
         }
 
-        const doctorId = doctors[0].id;
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const passwordHash = await bcrypt.hash(password, 10);
 
-        await pool.query(
-            'UPDATE doctors SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
-            [hashedPassword, doctorId]
+        const [result] = await pool.query(
+            `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender, wilaya_id, commun_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [firstName, lastName, phone, passwordHash, address || null, birthDate || null, gender || 'male', wilayaId || null, communId || null]
         );
 
-        res.status(200).json({
+        const patientId = result.insertId;
+        const token = signToken({ patientId, phone, role: 'patient' }, '30d');
+
+        res.status(201).json({
             success: true,
-            message: 'Mot de passe mis à jour'
+            message: 'Compte patient créé',
+            token,
+            patient: { id: patientId, firstName, lastName, phone, wilayaId, communId }
         });
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la réinitialisation' });
+        console.error('patientSignUp error:', error);
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
 };
 
+/**
+ * POST /auth/patient/signin
+ */
 export const patientSignIn = async (req, res) => {
     try {
         const { phone, password } = req.body;
@@ -506,7 +366,15 @@ export const patientSignIn = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Téléphone et mot de passe requis' });
         }
 
-        const [users] = await pool.query('SELECT * FROM patient_users WHERE phone = ?', [phone]);
+        const [users] = await pool.query(
+            `SELECT p.*, w.name AS wilaya_name, cm.name AS commun_name
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.phone = ?`,
+            [phone]
+        );
+
         if (users.length === 0) {
             return res.status(401).json({ success: false, message: 'Identifiants invalides' });
         }
@@ -517,125 +385,55 @@ export const patientSignIn = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Identifiants invalides' });
         }
 
-        const token = jwt.sign(
-            { patientId: user.id, email: user.email, role: 'patient' },
-            process.env.JWT_SECRET,
-            { expiresIn: '30d' }
-        );
+        const token = signToken({ patientId: user.id, phone: user.phone, role: 'patient' }, '30d');
 
         res.status(200).json({
             success: true,
             token,
             patient: {
-                id: user.id,
-                email: user.email,
-                firstName: user.first_name,
-                lastName: user.last_name,
-                phone: user.phone,
-                address: user.address,
-                birthDate: user.birth_date,
-                gender: user.gender,
-                wilaya: user.wilaya,
-                commune: user.commune
+                id:         user.id,
+                firstName:  user.firstname,
+                lastName:   user.lastname,
+                phone:      user.phone,
+                address:    user.address,
+                birthDate:  user.birthdate,
+                gender:     user.gender,
+                wilayaId:   user.wilaya_id,
+                wilaya:     user.wilaya_name,
+                communId:   user.commun_id,
+                commune:    user.commun_name,
+                isVerified: user.is_verified === 1
             }
         });
+
     } catch (error) {
-        console.error(error);
+        console.error('patientSignIn error:', error);
         res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
 };
 
+// ─── PASSWORD RESET (DISABLED — schema columns missing) ───────────────────────
+// The new doctor/patient tables do NOT have: email, reset_token, reset_token_expires
+// These endpoints return 501 until those columns are added to the DB.
+
+export const forgotPassword = async (req, res) => {
+    res.status(501).json({
+        success: false,
+        message: 'Réinitialisation par email non disponible. Les colonnes email/reset_token sont absentes du schéma actuel.'
+    });
+};
+
+export const resetPassword = async (req, res) => {
+    res.status(501).json({ success: false, message: 'Fonctionnalité non disponible.' });
+};
+
 export const patientForgotPassword = async (req, res) => {
-    try {
-        const { email } = req.body;
-        if (!email) {
-            return res.status(400).json({ success: false, message: 'Email requis' });
-        }
-
-        const [users] = await pool.query('SELECT id, email, first_name FROM patient_users WHERE email = ?', [email]);
-
-        if (users.length === 0) {
-            return res.status(200).json({
-                success: true,
-                message: 'Si un compte existe avec cet e-mail, un lien de réinitialisation sera envoyé'
-            });
-        }
-
-        const user = users[0];
-        const token = crypto.randomBytes(32).toString('hex');
-        const expires = new Date();
-        expires.setHours(expires.getHours() + 1);
-
-        await pool.query(
-            'UPDATE patient_users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
-            [token, expires, user.id]
-        );
-
-        const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5173';
-        const resetLink = `${frontendUrl}/patient/reset-password/${token}`;
-
-        console.log('Sending patient reset email to:', user.email);
-
-        try {
-            await sendPatientResetEmail(user.email, resetLink);
-            console.log('Patient reset email sent successfully to:', user.email);
-
-            res.status(200).json({
-                success: true,
-                message: 'E-mail de réinitialisation envoyé'
-            });
-        } catch (emailError) {
-            console.error('Failed to send patient reset email:', emailError);
-            return res.status(500).json({
-                success: false,
-                message: 'Le compte existe mais l\'envoi de l\'e-mail a échoué : ' + emailError.message
-            });
-        }
-    } catch (error) {
-        console.error('Patient forgot password error:', error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la demande' });
-    }
+    res.status(501).json({
+        success: false,
+        message: 'Réinitialisation par email non disponible dans le schéma actuel.'
+    });
 };
 
 export const patientResetPassword = async (req, res) => {
-    try {
-        const { token, password } = req.body;
-        if (!token || !password) {
-            return res.status(400).json({ success: false, message: 'Données manquantes' });
-        }
-
-        const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
-        if (!passwordRegex.test(password)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule et un chiffre'
-            });
-        }
-
-        const [users] = await pool.query(
-            'SELECT id FROM patient_users WHERE reset_token = ? AND reset_token_expires > NOW()',
-            [token]
-        );
-
-        if (users.length === 0) {
-            return res.status(400).json({ success: false, message: 'Lien invalide ou expiré' });
-        }
-
-        const userId = users[0].id;
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        await pool.query(
-            'UPDATE patient_users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
-            [hashedPassword, userId]
-        );
-
-        res.status(200).json({
-            success: true,
-            message: 'Mot de passe mis à jour avec succès'
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la réinitialisation' });
-    }
+    res.status(501).json({ success: false, message: 'Fonctionnalité non disponible.' });
 };

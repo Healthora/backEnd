@@ -6,248 +6,187 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
 });
 
-// Multer: store file in memory (no disk writes)
 const storage = multer.memoryStorage();
 export const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new Error('Only image files are allowed'), false);
     }
-  }
 });
 
-const uploadImageToCloudinary = (buffer, mimetype) =>
-  new Promise((resolve, reject) => {
-    cloudinary.uploader
-      .upload_stream(
-        {
-          folder: 'doctorapp/doctors',
-          resource_type: 'image',
-          format: mimetype.split('/')[1] || 'jpg',
-        },
-        (error, result) => {
-          if (error) {
-            console.error('Cloudinary Image Upload Error:', error);
-            reject(error);
-          } else {
-            console.log('Cloudinary Image Upload Success:', result.secure_url);
-            resolve(result);
-          }
-        }
-      )
-      .end(buffer);
-  });
+const uploadToCloudinary = (buffer, mimetype) =>
+    new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+            { folder: 'doctorapp/doctors', resource_type: 'image', format: mimetype.split('/')[1] || 'jpg' },
+            (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+            }
+        ).end(buffer);
+    });
+
+// ─── UPLOAD PROFILE IMAGE ────────────────────────────────────────────────────
 
 export const uploadDoctorImage = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No image file provided' });
-    }
-
-    const doctorId = req.doctor.doctorId;
-    const result = await uploadImageToCloudinary(req.file.buffer, req.file.mimetype);
-
-    await pool.query('UPDATE doctors SET img_url = ? WHERE id = ?', [result.secure_url, doctorId]);
-
-    // Update localStorage-compatible response
-    res.status(200).json({
-      success: true,
-      message: 'Photo de profil mise à jour avec succès',
-      data: { imgUrl: result.secure_url }
-    });
-  } catch (error) {
-    console.error('Upload doctor image error:', error);
-    res.status(500).json({ success: false, message: 'Erreur lors du téléchargement de la photo' });
-  }
-};
-
-const syncAvailabilities = async (connection, doctorId, cabinetId, schedule, slotDuration) => {
     try {
-        // 1. Delete all old availabilities for this cabinet
-        await connection.query('DELETE FROM availabilities WHERE cabinet_id = ?', [cabinetId]);
-        
-        if (!schedule) return;
-
-        const dayMap = {
-            monday: 'monday', tuesday: 'tuesday', wednesday: 'wednesday',
-            thursday: 'thursday', friday: 'friday', saturday: 'saturday', sunday: 'sunday'
-        };
-
-        // Helper to ensure HH:mm:ss format
-        const formatTime = (timeStr) => {
-            if (!timeStr) return null;
-            let [h, m] = timeStr.split(':');
-            h = h.padStart(2, '0');
-            m = (m || '00').padEnd(2, '0');
-            return `${h}:${m}:00`;
-        };
-        
-        for (const [day, dayData] of Object.entries(schedule)) {
-            const backendDay = dayMap[day.toLowerCase()];
-            if (!backendDay || !dayData.isOpen) continue;
-
-            const slots = dayData.slots || [];
-            
-            // Handle legacy structure (start/end on root) or new structure (slots array)
-            const normalizedSlots = slots.length > 0 ? slots : 
-                                  (dayData.start && dayData.end ? [{start: dayData.start, end: dayData.end}] : []);
-
-            for (const slot of normalizedSlots) {
-                if (slot.start && slot.end) {
-                     const startTime = formatTime(slot.start);
-                     const endTime = formatTime(slot.end);
-                     
-                     await connection.query(`
-                        INSERT INTO availabilities (doctor_id, cabinet_id, day_of_week, start_time, end_time, slot_duration)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                     `, [doctorId, cabinetId, backendDay, startTime, endTime, slotDuration || 30]);
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error in syncAvailabilities:', error);
-        throw error; // Re-throw to trigger transaction rollback
-    }
-};
-
-export const updateProfilSetting = async (req, res, next) => {
-    try {
-        const { email, firstName, lastName, phone, specialty, bio } = req.body;
+        if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
         const doctorId = req.doctor.doctorId;
+        const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
 
-        if (!email || !firstName || !lastName || !phone || !specialty) {
-            return res.status(400).json({
-                success: false,
-                message: 'Veuillez remplir tous les champs obligatoires'
-            });
-        }
-
-        const [result] = await pool.query(`
-            UPDATE doctors
-            SET email = ?, first_name = ?, last_name = ?, phone = ?, specialty = ?, bio = ?
-            WHERE id = ?
-        `, [email, firstName, lastName, phone, specialty, bio || '', doctorId]);
+        await pool.query('UPDATE doctor SET img_url = ? WHERE id = ?', [result.secure_url, doctorId]);
 
         res.status(200).json({
             success: true,
-            message: 'Profil mis à jour avec succès',
-            data: { email, firstName, lastName, phone, specialty, bio }
+            message: 'Photo de profil mise à jour avec succès',
+            data: { imgUrl: result.secure_url }
         });
     } catch (error) {
-        console.error('Update profile error:', error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour' });
+        res.status(500).json({ success: false, message: 'Erreur lors du téléchargement' });
     }
-}
+};
 
-export const updateCabinetSetting = async (req, res, next) => {
-    let connection;
+// ─── SYNC AVAILABILITY ───────────────────────────────────────────────────────
+
+const syncAvailabilities = async (connection, doctorId, schedule, slotDuration = 30) => {
+    // Delete existing availability for this doctor (no cabinet_id in new schema)
+    await connection.query('DELETE FROM availability WHERE doctor_id = ?', [doctorId]);
+    if (!schedule) return;
+
+    const dayMap = {
+        sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
+        thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday'
+    };
+
+    const fmtTime = (t) => {
+        if (!t) return null;
+        const [h, m] = t.split(':');
+        return `${h.padStart(2, '0')}:${(m || '00').padStart(2, '0')}:00`;
+    };
+
+    for (const [day, dayData] of Object.entries(schedule)) {
+        const dbDay = dayMap[day.toLowerCase()];
+        if (!dbDay || !dayData.isOpen) continue;
+
+        const slots = dayData.slots?.length ? dayData.slots : (dayData.start && dayData.end ? [{ start: dayData.start, end: dayData.end }] : []);
+
+        for (const slot of slots) {
+            if (slot.start && slot.end) {
+                await connection.query(
+                    `INSERT INTO availability (doctor_id, day_of_week, start_time, end_time, slot_duration)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration]
+                );
+            }
+        }
+    }
+};
+
+// ─── UPDATE PROFILE ──────────────────────────────────────────────────────────
+
+export const updateProfilSetting = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-        const { cabinetName, wilaya, commune, cabinetAddress, schedule } = req.body;
+        await connection.beginTransaction();
+        const { firstName, lastName, phone, specialtyId, bio } = req.body;
         const doctorId = req.doctor.doctorId;
 
-        if (!cabinetName || !wilaya || !commune || !cabinetAddress) {
-            return res.status(400).json({
-                success: false,
-                message: 'Veuillez remplir tous les champs obligatoires'
-            });
+        if (!firstName || !lastName || !phone) {
+            return res.status(400).json({ success: false, message: 'Prénom, nom et téléphone obligatoires' });
         }
-        
+
+        const [phoneCheck] = await connection.query('SELECT id FROM doctor WHERE phone = ? AND id != ?', [phone, doctorId]);
+        if (phoneCheck.length > 0) return res.status(409).json({ success: false, message: 'Téléphone déjà utilisé' });
+
+        await connection.query(
+            `UPDATE doctor SET firstname = ?, lastname = ?, phone = ?, bio = ? WHERE id = ?`,
+            [firstName, lastName, phone, bio || '', doctorId]
+        );
+
+        if (specialtyId !== undefined) {
+            await connection.query('DELETE FROM doctor_speciality WHERE doctor_id = ?', [doctorId]);
+            if (specialtyId) await connection.query('INSERT INTO doctor_speciality (doctor_id, speciality_id) VALUES (?, ?)', [doctorId, specialtyId]);
+        }
+
+        await connection.commit();
+        res.status(200).json({ success: true, message: 'Profil mis à jour' });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour' });
+    } finally {
+        connection.release();
+    }
+};
+
+// ─── UPDATE CABINET ───────────────────────────────────────────────────────────
+
+export const updateCabinetSetting = async (req, res) => {
+    let connection;
+    try {
+        const { cabinetName, wilayaId, communId, cabinetAddress, schedule } = req.body;
+        const doctorId = req.doctor.doctorId;
+
+        if (!cabinetName || !wilayaId || !communId || !cabinetAddress) {
+            return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
+        }
+
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        // 1. Get current doctor settings for slot duration
-        const [doctorData] = await connection.query('SELECT consultation_duration FROM doctors WHERE id = ?', [doctorId]);
-        const slotDuration = doctorData[0]?.consultation_duration || 30;
-
-        // 2. Check if cabinet exists
-        const [existingCabinets] = await connection.query('SELECT id FROM cabinets WHERE doctor_id = ?', [doctorId]);
-        let cabinetId;
-
-        if (existingCabinets.length > 0) {
-            cabinetId = existingCabinets[0].id;
-            await connection.query(`
-                UPDATE cabinets
-                SET name = ?, wilaya = ?, commune = ?, address = ?, schedule = ?
-                WHERE id = ?
-            `, [cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule), cabinetId]);
-        } else {
-            const [insertResult] = await connection.query(
-                'INSERT INTO cabinets (doctor_id, name, wilaya, commune, address, schedule) VALUES (?, ?, ?, ?, ?, ?)',
-                [doctorId, cabinetName, wilaya, commune, cabinetAddress, JSON.stringify(schedule)]
+        const [existing] = await connection.query('SELECT id FROM cabinet WHERE doctor_id = ?', [doctorId]);
+        if (existing.length > 0) {
+            await connection.query(
+                `UPDATE cabinet SET name = ?, wilaya_id = ?, commun_id = ?, address = ? WHERE id = ?`,
+                [cabinetName, wilayaId, communId, cabinetAddress, existing[0].id]
             );
-            cabinetId = insertResult.insertId;
+        } else {
+            await connection.query(
+                `INSERT INTO cabinet (doctor_id, name, wilaya_id, commun_id, address) VALUES (?, ?, ?, ?, ?)`,
+                [doctorId, cabinetName, wilayaId, communId, cabinetAddress]
+            );
         }
-        
-        // 3. Sync availabilities table
-        await syncAvailabilities(connection, doctorId, cabinetId, schedule, slotDuration);
-        
+
+        if (schedule) await syncAvailabilities(connection, doctorId, schedule);
+
         await connection.commit();
-        
-        res.status(200).json({
-            success: true,
-            message: 'Cabinet et disponibilités mis à jour avec succès',
-            data: { cabinetName, cabinetAddress, schedule, consultationDuration: slotDuration }
-        });
+        res.status(200).json({ success: true, message: 'Cabinet mis à jour' });
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Update cabinet error:', error);
-        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour du cabinet' });
+        res.status(500).json({ success: false, message: 'Erreur' });
     } finally {
         if (connection) connection.release();
     }
-}
+};
+
+// ─── UPDATE RDV SETTINGS ─────────────────────────────────────────────────────
 
 export const updateRDVSetting = async (req, res) => {
     let connection;
     try {
-        const { onlineBooking, consultationDuration } = req.body;
+        const { onlineBooking, consultationDuration, schedule } = req.body;
         const doctorId = req.doctor.doctorId;
 
-        connection = await pool.getConnection();
-        await connection.beginTransaction();
+        await pool.query('UPDATE doctor SET is_reservation_online = ? WHERE id = ?', [onlineBooking ? 1 : 0, doctorId]);
 
-        // 1. Update doctor table
-        await connection.query(`
-            UPDATE doctors
-            SET is_reservation_online = ?,
-            consultation_duration = ?
-            WHERE id = ?
-        `, [onlineBooking ? 1 : 0, consultationDuration || 30, doctorId]);
-
-        // 2. Fetch cabinet info to sync availabilities
-        const [cabinetRows] = await connection.query('SELECT id, schedule FROM cabinets WHERE doctor_id = ?', [doctorId]);
-        
-        if (cabinetRows.length > 0) {
-            const cabinetId = cabinetRows[0].id;
-            const schedule = typeof cabinetRows[0].schedule === 'string' 
-                ? JSON.parse(cabinetRows[0].schedule) 
-                : cabinetRows[0].schedule;
-            
-            await syncAvailabilities(connection, doctorId, cabinetId, schedule, consultationDuration || 30);
+        if (schedule) {
+            connection = await pool.getConnection();
+            await connection.beginTransaction();
+            await syncAvailabilities(connection, doctorId, schedule, consultationDuration || 30);
+            await connection.commit();
         }
 
-        await connection.commit();
-
-        res.status(200).json({
-            success: true,
-            message: 'Paramètres RDV mis à jour',
-            data: { onlineBooking, consultationDuration }
-        });
+        res.status(200).json({ success: true, message: 'Paramètres RDV mis à jour' });
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Update RDV error:', error);
         res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour des RDV' });
     } finally {
         if (connection) connection.release();
     }
-}
+};

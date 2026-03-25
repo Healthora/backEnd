@@ -1,5 +1,18 @@
 import pool from "../database.js";
 
+/**
+ * Patient management for doctors.
+ *
+ * Architecture change (new schema):
+ *  - Old: 'patients' was a per-doctor CRM table (doctor_id, first_name, last_name, ...)
+ *  - New: 'patient' is a shared table (all app users), linked via 'patient_doctor' join table
+ *
+ * Column renames: firstname (was first_name), lastname (was last_name), birthdate (was birth_date)
+ * No email column in new patient table.
+ */
+
+// ─── GET ALL PATIENTS FOR A DOCTOR ───────────────────────────────────────────
+
 export const getAllPatient = async (req, res, next) => {
     try {
         const doctorId = req.params.id;
@@ -12,73 +25,54 @@ export const getAllPatient = async (req, res, next) => {
         }
 
         const searchTerm = req.query.search || '';
-        let query;
-        let queryParams = [];
+        let query, queryParams;
 
         if (searchTerm) {
-            const searchPattern = `%${searchTerm}%`;
+            const like = `%${searchTerm}%`;
             query = `
-                SELECT * FROM (
-                    SELECT 
-                        p.id, p.doctor_id, p.first_name, p.last_name, p.email, p.phone, p.birth_date, p.gender, p.address, p.created_at,
-                        MAX(CASE WHEN pu.id IS NOT NULL THEN 1 ELSE 0 END) as is_app_user,
-                        0 as is_external_user,
-                        MAX(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as last_visit,
-                        MIN(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as next_visit,
-                        COUNT(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_past,
-                        COUNT(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_future,
-                        COUNT(CASE WHEN a.status IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as nrp_count
-                    FROM patients p
-                    LEFT JOIN appointments a ON a.patient_id = p.id
-                    LEFT JOIN patient_users pu ON p.phone = pu.phone
-                    WHERE p.doctor_id = ? AND (
-                        p.first_name LIKE ? OR 
-                        p.last_name LIKE ? OR 
-                        p.email LIKE ? OR 
-                        p.phone LIKE ? OR
-                        p.address LIKE ?
-                    )
-                    GROUP BY p.id
-
-                    UNION ALL
-
-                    SELECT 
-                        pu.id, NULL as doctor_id, pu.first_name, pu.last_name, pu.email, pu.phone, pu.birth_date, pu.gender, pu.address, pu.created_at,
-                        1 as is_app_user,
-                        1 as is_external_user,
-                        NULL as last_visit,
-                        NULL as next_visit,
-                        0 as total_past,
-                        0 as total_future,
-                        0 as nrp_count
-                    FROM patient_users pu
-                    WHERE (pu.first_name LIKE ? OR pu.last_name LIKE ? OR pu.email LIKE ? OR pu.phone LIKE ?)
-                    AND pu.phone NOT IN (SELECT phone FROM patients WHERE doctor_id = ? AND phone IS NOT NULL)
-                    AND pu.email NOT IN (SELECT email FROM patients WHERE doctor_id = ? AND email IS NOT NULL)
-                ) as results
-                ORDER BY is_external_user ASC, last_name ASC, first_name ASC
+                SELECT
+                    p.id,
+                    p.firstname       AS first_name,
+                    p.lastname        AS last_name,
+                    p.phone,
+                    p.address,
+                    p.birthdate       AS birth_date,
+                    p.gender,
+                    p.is_verified,
+                    p.created_at,
+                    pd.created_at     AS linked_at,
+                    w.name            AS wilaya,
+                    cm.name           AS commune
+                FROM patient_doctor pd
+                JOIN patient p   ON pd.patient_id  = p.id
+                LEFT JOIN wilaya w   ON p.wilaya_id = w.id
+                LEFT JOIN commun cm  ON p.commun_id = cm.id
+                WHERE pd.doctor_id = ?
+                  AND (p.firstname LIKE ? OR p.lastname LIKE ? OR p.phone LIKE ? OR p.address LIKE ?)
+                ORDER BY p.lastname ASC, p.firstname ASC
             `;
-            queryParams = [
-                doctorId, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern,
-                searchPattern, searchPattern, searchPattern, searchPattern, 
-                doctorId, doctorId
-            ];
+            queryParams = [doctorId, like, like, like, like];
         } else {
             query = `
-                SELECT 
-                    p.*,
-                    MAX(CASE WHEN pu.id IS NOT NULL THEN 1 ELSE 0 END) as is_app_user,
-                    0 as is_external_user,
-                    MAX(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as last_visit,
-                    MIN(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN a.appointment_date END) as next_visit,
-                    COUNT(CASE WHEN a.appointment_date < CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_past,
-                    COUNT(CASE WHEN a.appointment_date >= CURRENT_DATE AND a.status NOT IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as total_future,
-                    COUNT(CASE WHEN a.status IN ('ne_repond_pas', 'reprogramme') THEN 1 END) as nrp_count
-                FROM patients p
-                LEFT JOIN appointments a ON a.patient_id = p.id
-                LEFT JOIN patient_users pu ON p.phone = pu.phone
-                WHERE p.doctor_id = ?
-                GROUP BY p.id
+                SELECT
+                    p.id,
+                    p.firstname       AS first_name,
+                    p.lastname        AS last_name,
+                    p.phone,
+                    p.address,
+                    p.birthdate       AS birth_date,
+                    p.gender,
+                    p.is_verified,
+                    p.created_at,
+                    pd.created_at     AS linked_at,
+                    w.name            AS wilaya,
+                    cm.name           AS commune
+                FROM patient_doctor pd
+                JOIN patient p   ON pd.patient_id  = p.id
+                LEFT JOIN wilaya w   ON p.wilaya_id = w.id
+                LEFT JOIN commun cm  ON p.commun_id = cm.id
+                WHERE pd.doctor_id = ?
+                ORDER BY p.lastname ASC, p.firstname ASC
             `;
             queryParams = [doctorId];
         }
@@ -90,21 +84,33 @@ export const getAllPatient = async (req, res, next) => {
             message: 'Patients récupérés avec succès',
             data: patients
         });
+
     } catch (err) {
-        console.error(err);
+        console.error('getAllPatient error:', err);
         next(err);
     }
 };
 
+// ─── ADD / LINK PATIENT ───────────────────────────────────────────────────────
+
+/**
+ * In the new schema:
+ * 1. Check if patient with this phone exists in 'patient' table.
+ * 2. If yes → just create a patient_doctor link (if not already linked).
+ * 3. If no  → create new patient record then link.
+ */
 export const addPatient = async (req, res, next) => {
+    const connection = await pool.getConnection();
     try {
-        const { firstName, lastName, email, phone, birthday, gender, address } = req.body;
+        await connection.beginTransaction();
+
+        const { firstName, lastName, phone, birthday, gender, address } = req.body;
         const doctorId = req.doctor.doctorId;
 
-        if (!firstName || !lastName || !phone || !email) {
+        if (!firstName || !lastName || !phone) {
             return res.status(400).json({
                 success: false,
-                message: 'Le prénom, nom, téléphone et email sont obligatoires'
+                message: 'Le prénom, nom et téléphone sont obligatoires'
             });
         }
 
@@ -112,40 +118,59 @@ export const addPatient = async (req, res, next) => {
         if (!phoneRegex.test(phone)) {
             return res.status(400).json({
                 success: false,
-                message: 'Le numéro de téléphone doit contenir 10 chiffres et commencer par 05, 06 ou 07'
+                message: 'Numéro invalide — doit commencer par 05, 06 ou 07 et contenir 10 chiffres'
             });
         }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                message: "Format d'email invalide"
-            });
-        }
-
-        const [existingPatient] = await pool.query(
-            `SELECT id FROM patients WHERE doctor_id = ? AND (email = ? OR phone = ?)`,
-            [doctorId, email || null, phone]
+        // Check if patient already exists
+        const [existingPatient] = await connection.query(
+            'SELECT id FROM patient WHERE phone = ?', [phone]
         );
+
+        let patientId;
 
         if (existingPatient.length > 0) {
-            return res.status(409).json({
-                success: false,
-                message: 'Un patient avec cet email ou ce téléphone existe déjà'
-            });
+            patientId = existingPatient[0].id;
+
+            // Check if already linked to this doctor
+            const [existingLink] = await connection.query(
+                'SELECT id FROM patient_doctor WHERE patient_id = ? AND doctor_id = ?',
+                [patientId, doctorId]
+            );
+            if (existingLink.length > 0) {
+                await connection.rollback();
+                return res.status(409).json({
+                    success: false,
+                    message: 'Ce patient est déjà dans votre liste'
+                });
+            }
+        } else {
+            // Create new patient (no email, no password — doctor-added patients start unverified)
+            const [insertResult] = await connection.query(
+                `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender)
+                 VALUES (?, ?, ?, '', ?, ?, ?)`,
+                [firstName, lastName, phone, address || null, birthday || null, gender || 'male']
+            );
+            patientId = insertResult.insertId;
         }
 
-        const [result] = await pool.query(
-            `INSERT INTO patients 
-             (doctor_id, first_name, last_name, email, phone, birth_date, gender, address) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [doctorId, firstName, lastName, email || null, phone, birthday || null, gender || 'M', address || null]
+        // Create the doctor-patient link
+        await connection.query(
+            'INSERT INTO patient_doctor (patient_id, doctor_id) VALUES (?, ?)',
+            [patientId, doctorId]
         );
 
+        await connection.commit();
+
         const [newPatient] = await pool.query(
-            'SELECT * FROM patients WHERE id = ?',
-            [result.insertId]
+            `SELECT p.id, p.firstname AS first_name, p.lastname AS last_name, p.phone,
+                    p.address, p.birthdate AS birth_date, p.gender, p.is_verified, p.created_at,
+                    w.name AS wilaya, cm.name AS commune
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.id = ?`,
+            [patientId]
         );
 
         res.status(201).json({
@@ -155,119 +180,109 @@ export const addPatient = async (req, res, next) => {
         });
 
     } catch (err) {
-        console.error('Error adding patient:', err);
+        await connection.rollback();
+        console.error('addPatient error:', err);
         if (err.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({
-                success: false,
-                message: 'Un patient avec ces informations existe déjà'
-            });
+            return res.status(409).json({ success: false, message: 'Ce patient existe déjà' });
         }
         next(err);
+    } finally {
+        connection.release();
     }
 };
 
+// ─── UPDATE PATIENT ───────────────────────────────────────────────────────────
+
 export const updatePatient = async (req, res, next) => {
     try {
-        const patientId = req.params.patientId;
-        const { firstName, lastName, email, phone, birthday, gender, address } = req.body;
+        const { patientId } = req.params;
+        const { firstName, lastName, phone, birthday, gender, address } = req.body;
+
+        // Verify this patient is linked to the requesting doctor
+        const [link] = await pool.query(
+            'SELECT id FROM patient_doctor WHERE patient_id = ? AND doctor_id = ?',
+            [patientId, req.doctor.doctorId]
+        );
+        if (link.length === 0) {
+            return res.status(404).json({ success: false, message: 'Patient non trouvé' });
+        }
 
         if (phone) {
             const phoneRegex = /^0[567]\d{8}$/;
             if (!phoneRegex.test(phone)) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Le numéro de téléphone doit contenir 10 chiffres et commencer par 05, 06 ou 07'
+                    message: 'Numéro invalide — doit commencer par 05, 06 ou 07 et contenir 10 chiffres'
                 });
             }
-        }
-
-        if (email) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Format d'email invalide"
-                });
-            }
-        }
-
-        const [existingPatient] = await pool.query(
-            'SELECT id FROM patients WHERE id = ? AND doctor_id = ?',
-            [patientId, req.doctor.doctorId]
-        );
-
-        if (existingPatient.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Patient non trouvé'
-            });
         }
 
         const updates = [];
-        const values = [];
+        const values  = [];
 
-        if (firstName) { updates.push('first_name = ?'); values.push(firstName); }
-        if (lastName) { updates.push('last_name = ?'); values.push(lastName); }
-        if (email !== undefined) { updates.push('email = ?'); values.push(email || null); }
-        if (phone) { updates.push('phone = ?'); values.push(phone); }
-        if (birthday !== undefined) { updates.push('birth_date = ?'); values.push(birthday || null); }
-        if (gender) { updates.push('gender = ?'); values.push(gender); }
-        if (address !== undefined) { updates.push('address = ?'); values.push(address || null); }
+        if (firstName !== undefined) { updates.push('firstname = ?'); values.push(firstName); }
+        if (lastName  !== undefined) { updates.push('lastname = ?');  values.push(lastName);  }
+        if (phone     !== undefined) { updates.push('phone = ?');     values.push(phone);     }
+        if (birthday  !== undefined) { updates.push('birthdate = ?'); values.push(birthday || null); }
+        if (gender    !== undefined) { updates.push('gender = ?');    values.push(gender);    }
+        if (address   !== undefined) { updates.push('address = ?');   values.push(address || null); }
 
         if (updates.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Aucune donnée à mettre à jour'
-            });
+            return res.status(400).json({ success: false, message: 'Aucune donnée à mettre à jour' });
         }
 
         values.push(patientId);
+        await pool.query(`UPDATE patient SET ${updates.join(', ')} WHERE id = ?`, values);
 
-        await pool.query(
-            `UPDATE patients SET ${updates.join(', ')} WHERE id = ?`,
-            values
-        );
-
-        const [updatedPatient] = await pool.query(
-            'SELECT * FROM patients WHERE id = ?',
+        const [updated] = await pool.query(
+            `SELECT p.id, p.firstname AS first_name, p.lastname AS last_name, p.phone,
+                    p.address, p.birthdate AS birth_date, p.gender, p.is_verified, p.created_at,
+                    w.name AS wilaya, cm.name AS commune
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.id = ?`,
             [patientId]
         );
 
         res.status(200).json({
             success: true,
             message: 'Patient mis à jour avec succès',
-            data: updatedPatient[0]
+            data: updated[0]
         });
 
     } catch (err) {
-        console.error('Error updating patient:', err);
+        console.error('updatePatient error:', err);
         next(err);
     }
 };
 
+// ─── DELETE (UNLINK) PATIENT ──────────────────────────────────────────────────
+
+/**
+ * Removes the doctor-patient link (patient_doctor row).
+ * Does NOT delete the patient account from the 'patient' table (shared resource).
+ */
 export const deletePatient = async (req, res, next) => {
     try {
-        const patientId = req.params.patientId;
+        const { patientId } = req.params;
 
         const [result] = await pool.query(
-            'DELETE FROM patients WHERE id = ? AND doctor_id = ?',
+            'DELETE FROM patient_doctor WHERE patient_id = ? AND doctor_id = ?',
             [patientId, req.doctor.doctorId]
         );
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Patient non trouvé'
-            });
+            return res.status(404).json({ success: false, message: 'Patient non trouvé' });
         }
 
         res.status(200).json({
             success: true,
-            message: 'Patient supprimé avec succès'
+            message: 'Patient retiré de votre liste avec succès'
         });
 
     } catch (err) {
-        console.error('Error deleting patient:', err);
+        console.error('deletePatient error:', err);
         next(err);
     }
 };
