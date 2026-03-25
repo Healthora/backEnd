@@ -55,7 +55,7 @@ export const uploadDoctorImage = async (req, res) => {
 
 // ─── SYNC AVAILABILITY ───────────────────────────────────────────────────────
 
-const syncAvailabilities = async (connection, doctorId, schedule, slotDuration = 30) => {
+const syncAvailabilities = async (connection, doctorId, schedule, slotDuration = 30, advanceBookingDays = 0) => {
     // Delete existing availability for this doctor (no cabinet_id in new schema)
     await connection.query('DELETE FROM availability WHERE doctor_id = ?', [doctorId]);
     if (!schedule) return;
@@ -83,7 +83,7 @@ const syncAvailabilities = async (connection, doctorId, schedule, slotDuration =
                     await connection.query(
                         `INSERT INTO availability (doctor_id, day_of_week, start_time, end_time, slot_duration, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day)
                          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                        [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration, dayData.advanceBookingDays || 0, dayData.maxAppointmentsPerDay || 0]
+                        [doctorId, dbDay, fmtTime(slot.start), fmtTime(slot.end), slotDuration, advanceBookingDays, dayData.maxAppointmentsPerDay || 0]
                     );
                 } catch (err) {
                     console.error(`Failed to insert availability for ${dbDay}:`, err.message);
@@ -138,7 +138,7 @@ export const updateProfilSetting = async (req, res) => {
 export const updateCabinetSetting = async (req, res) => {
     let connection;
     try {
-        const { cabinetName, wilayaId, communId, cabinetAddress, schedule } = req.body;
+        const { cabinetName, wilayaId, communId, cabinetAddress, schedule, advanceBookingDays } = req.body;
         const doctorId = req.doctor.doctorId;
 
         if (!cabinetName || !wilayaId || !communId || !cabinetAddress) {
@@ -161,7 +161,7 @@ export const updateCabinetSetting = async (req, res) => {
             );
         }
 
-        if (schedule) await syncAvailabilities(connection, doctorId, schedule);
+        if (schedule) await syncAvailabilities(connection, doctorId, schedule, 30, advanceBookingDays || 0);
 
         await connection.commit();
         res.status(200).json({
@@ -182,7 +182,7 @@ export const updateCabinetSetting = async (req, res) => {
 export const updateRDVSetting = async (req, res) => {
     let connection;
     try {
-        const { onlineBooking, consultationDuration, schedule } = req.body;
+        const { onlineBooking, consultationDuration, schedule, advanceBookingDays } = req.body;
         const doctorId = req.doctor.doctorId;
 
         await pool.query('UPDATE doctor SET is_reservation_online = ? WHERE id = ?', [onlineBooking ? 1 : 0, doctorId]);
@@ -190,7 +190,7 @@ export const updateRDVSetting = async (req, res) => {
         if (schedule) {
             connection = await pool.getConnection();
             await connection.beginTransaction();
-            await syncAvailabilities(connection, doctorId, schedule, consultationDuration || 30);
+            await syncAvailabilities(connection, doctorId, schedule, consultationDuration || 30, advanceBookingDays || 0);
             await connection.commit();
         }
 

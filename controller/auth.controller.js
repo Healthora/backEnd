@@ -215,7 +215,6 @@ export const signIn = async (req, res) => {
                 token
             }
         });
-
     } catch (error) {
         console.error('Signin error:', error);
         res.status(500).json({
@@ -287,7 +286,6 @@ export const getCurrentDoctor = async (req, res) => {
             const day = av.day_of_week.toLowerCase();
             if (schedule[day]) {
                 schedule[day].isOpen = true;
-                schedule[day].advanceBookingDays = av.selectione_les_jours_a_la_vance || 0;
                 schedule[day].maxAppointmentsPerDay = av.selectione_les_number_of_appoi_by_day || 0;
                 schedule[day].slots.push({
                     start: av.start_time.substring(0, 5),
@@ -296,6 +294,7 @@ export const getCurrentDoctor = async (req, res) => {
             }
         });
 
+        const d = doctors[0];
         res.status(200).json({
             success: true,
             data: {
@@ -316,6 +315,7 @@ export const getCurrentDoctor = async (req, res) => {
                 communId: d.commun_id || null,
                 commune: d.commune || '',
                 onlineBooking: d.is_reservation_online === 1,
+                advanceBookingDays: availabilities.length > 0 ? availabilities[0].selectione_les_jours_a_la_vance : 0,
                 schedule: schedule,
                 createdAt: d.created_at
             }
