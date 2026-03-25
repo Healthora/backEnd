@@ -163,6 +163,12 @@ export const createOrdonnance = async (req, res) => {
       [appointment_id, doctor_id, patient_id, uploadResult.secure_url, JSON.stringify(medicaments)]
     );
 
+    // Automatiquement passer le RDV en statut "passé" dès qu'une ordonnance est créée
+    await pool.query(
+      `UPDATE appointment SET status = 'passé' WHERE id = ? AND doctor_id = ?`,
+      [appointment_id, doctor_id]
+    );
+
     res.status(201).json({
       success: true,
       message: "Ordonnance créée avec succès",
