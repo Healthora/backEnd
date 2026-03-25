@@ -268,7 +268,31 @@ export const getCurrentDoctor = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Médecin non trouvé' });
         }
 
-        const d = doctors[0];
+        const [availabilities] = await pool.query(
+            'SELECT day_of_week, start_time, end_time FROM availability WHERE doctor_id = ?',
+            [doctorId]
+        );
+
+        const schedule = {
+            sunday:    { isOpen: false, slots: [] },
+            monday:    { isOpen: false, slots: [] },
+            tuesday:   { isOpen: false, slots: [] },
+            wednesday: { isOpen: false, slots: [] },
+            thursday:  { isOpen: false, slots: [] },
+            friday:    { isOpen: false, slots: [] },
+            saturday:  { isOpen: false, slots: [] }
+        };
+
+        availabilities.forEach(av => {
+            const day = av.day_of_week.toLowerCase();
+            if (schedule[day]) {
+                schedule[day].isOpen = true;
+                schedule[day].slots.push({
+                    start: av.start_time.substring(0, 5),
+                    end: av.end_time.substring(0, 5)
+                });
+            }
+        });
 
         res.status(200).json({
             success: true,
@@ -290,6 +314,7 @@ export const getCurrentDoctor = async (req, res) => {
                 communId:       d.commun_id      || null,
                 commune:        d.commune        || '',
                 onlineBooking:  d.is_reservation_online === 1,
+                schedule:       schedule,
                 createdAt:      d.created_at
             }
         });
