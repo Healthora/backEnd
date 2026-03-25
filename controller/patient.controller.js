@@ -42,7 +42,9 @@ export const getAllPatient = async (req, res, next) => {
                     p.created_at,
                     pd.created_at     AS linked_at,
                     w.name            AS wilaya,
-                    cm.name           AS commune
+                    p.wilaya_id,
+                    cm.name           AS commune,
+                    p.commun_id
                 FROM patient_doctor pd
                 JOIN patient p   ON pd.patient_id  = p.id
                 LEFT JOIN wilaya w   ON p.wilaya_id = w.id
@@ -66,7 +68,9 @@ export const getAllPatient = async (req, res, next) => {
                     p.created_at,
                     pd.created_at     AS linked_at,
                     w.name            AS wilaya,
-                    cm.name           AS commune
+                    p.wilaya_id,
+                    cm.name           AS commune,
+                    p.commun_id
                 FROM patient_doctor pd
                 JOIN patient p   ON pd.patient_id  = p.id
                 LEFT JOIN wilaya w   ON p.wilaya_id = w.id
@@ -104,7 +108,7 @@ export const addPatient = async (req, res, next) => {
     try {
         await connection.beginTransaction();
 
-        const { firstName, lastName, phone, birthday, gender, address } = req.body;
+        const { firstName, lastName, phone, birthday, gender, address, wilayaId, communId } = req.body;
         const doctorId = req.doctor.doctorId;
 
         if (!firstName || !lastName || !phone) {
@@ -147,9 +151,9 @@ export const addPatient = async (req, res, next) => {
         } else {
             // Create new patient (no email, no password — doctor-added patients start unverified)
             const [insertResult] = await connection.query(
-                `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender)
-                 VALUES (?, ?, ?, '', ?, ?, ?)`,
-                [firstName, lastName, phone, address || null, birthday || null, gender || 'male']
+                `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender, wilaya_id, commun_id)
+                 VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)`,
+                [firstName, lastName, phone, address || null, birthday || null, gender || 'male', wilayaId || null, communId || null]
             );
             patientId = insertResult.insertId;
         }
@@ -165,7 +169,7 @@ export const addPatient = async (req, res, next) => {
         const [newPatient] = await pool.query(
             `SELECT p.id, p.firstname AS first_name, p.lastname AS last_name, p.phone,
                     p.address, p.birthdate AS birth_date, p.gender, p.is_verified, p.created_at,
-                    w.name AS wilaya, cm.name AS commune
+                    w.name AS wilaya, p.wilaya_id, cm.name AS commune, p.commun_id
              FROM patient p
              LEFT JOIN wilaya w  ON p.wilaya_id = w.id
              LEFT JOIN commun cm ON p.commun_id = cm.id
@@ -196,7 +200,7 @@ export const addPatient = async (req, res, next) => {
 export const updatePatient = async (req, res, next) => {
     try {
         const { patientId } = req.params;
-        const { firstName, lastName, phone, birthday, gender, address } = req.body;
+        const { firstName, lastName, phone, birthday, gender, address, wilayaId, communId } = req.body;
 
         // Verify this patient is linked to the requesting doctor
         const [link] = await pool.query(
@@ -226,6 +230,8 @@ export const updatePatient = async (req, res, next) => {
         if (birthday  !== undefined) { updates.push('birthdate = ?'); values.push(birthday || null); }
         if (gender    !== undefined) { updates.push('gender = ?');    values.push(gender);    }
         if (address   !== undefined) { updates.push('address = ?');   values.push(address || null); }
+        if (wilayaId  !== undefined) { updates.push('wilaya_id = ?');  values.push(wilayaId || null); }
+        if (communId  !== undefined) { updates.push('commun_id = ?');  values.push(communId || null); }
 
         if (updates.length === 0) {
             return res.status(400).json({ success: false, message: 'Aucune donnée à mettre à jour' });
@@ -237,7 +243,7 @@ export const updatePatient = async (req, res, next) => {
         const [updated] = await pool.query(
             `SELECT p.id, p.firstname AS first_name, p.lastname AS last_name, p.phone,
                     p.address, p.birthdate AS birth_date, p.gender, p.is_verified, p.created_at,
-                    w.name AS wilaya, cm.name AS commune
+                    w.name AS wilaya, p.wilaya_id, cm.name AS commune, p.commun_id
              FROM patient p
              LEFT JOIN wilaya w  ON p.wilaya_id = w.id
              LEFT JOIN commun cm ON p.commun_id = cm.id
