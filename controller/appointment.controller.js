@@ -37,27 +37,35 @@ export const createAppointment = async (req, res) => {
 
         // 2. Constraints Check
         const dObj = new Date(appointment_date);
+        
+        // Fetch doctor global constraints
+        const [[docConstraints]] = await pool.query(
+            'SELECT selectione_les_jours_a_la_vance, slot_duration FROM doctor WHERE id = ?',
+            [doctor_id]
+        );
+
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const dayOfWeek = dayNames[dObj.getDay()];
 
         const [avail] = await pool.query(
-            'SELECT selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ? LIMIT 1',
+            'SELECT selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ? LIMIT 1',
             [doctor_id, dayOfWeek]
         );
 
-        if (avail.length > 0) {
-            const row = avail[0];
-            
+        if (docConstraints) {
             // Advance Booking Range
-            if (row.selectione_les_jours_a_la_vance > 0) {
+            if (docConstraints.selectione_les_jours_a_la_vance > 0) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const diffDays = Math.ceil((dObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                if (diffDays > row.selectione_les_jours_a_la_vance) {
-                    return res.status(400).json({ success: false, message: `Hors délai : Réservation possible jusqu'à ${row.selectione_les_jours_a_la_vance} jours à l'avance.` });
+                if (diffDays > docConstraints.selectione_les_jours_a_la_vance) {
+                    return res.status(400).json({ success: false, message: `Hors délai : Réservation possible jusqu'à ${docConstraints.selectione_les_jours_a_la_vance} jours à l'avance.` });
                 }
             }
+        }
 
+        if (avail.length > 0) {
+            const row = avail[0];
             // Max Appointments per Day
             if (row.selectione_les_number_of_appoi_by_day > 0) {
                 const [countRows] = await pool.query(
@@ -280,18 +288,18 @@ export const getAvailableSlots = async (req, res) => {
         const dayOfWeek = dayNames[dObj.getDay()];
 
         const [availabilities] = await pool.query(
-            'SELECT start_time, end_time, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ?',
+            'SELECT start_time, end_time, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ?',
             [doctorId, dayOfWeek]
         );
 
         if (availabilities.length === 0) return res.status(200).json({ success: true, data: [] });
 
-        // Fetch slot_duration from doctor
-        const [[doc]] = await pool.query('SELECT slot_duration FROM doctor WHERE id = ?', [doctorId]);
+        // Fetch constraints from doctor
+        const [[doc]] = await pool.query('SELECT slot_duration, selectione_les_jours_a_la_vance FROM doctor WHERE id = ?', [doctorId]);
         const slotDuration = doc?.slot_duration || 30;
+        const advanceDays = doc?.selectione_les_jours_a_la_vance || 0;
 
         // 1. Check max days in advance
-        const advanceDays = availabilities[0].selectione_les_jours_a_la_vance || 0;
         if (advanceDays > 0) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);

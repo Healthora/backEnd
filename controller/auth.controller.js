@@ -243,7 +243,7 @@ export const getCurrentDoctor = async (req, res) => {
         const [doctors] = await pool.query(
             `SELECT
                 d.id, d.firstname, d.lastname, d.phone,
-                d.is_reservation_online, d.bio, d.img_url, d.is_verified, d.created_at, d.slot_duration,
+                d.is_reservation_online, d.bio, d.img_url, d.is_verified, d.created_at, d.slot_duration, d.selectione_les_jours_a_la_vance,
                 ds.speciality_id,
                 s.name  AS specialty,
                 c.id    AS cabinet_id,
@@ -268,7 +268,7 @@ export const getCurrentDoctor = async (req, res) => {
         }
 
         const [availabilities] = await pool.query(
-            'SELECT day_of_week, start_time, end_time, selectione_les_jours_a_la_vance, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ?',
+            'SELECT day_of_week, start_time, end_time, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ?',
             [doctorId]
         );
 
@@ -316,7 +316,7 @@ export const getCurrentDoctor = async (req, res) => {
                 commune: d.commune || '',
                 onlineBooking: d.is_reservation_online === 1,
                 consultationDuration: d.slot_duration || 30,
-                advanceBookingDays: availabilities.length > 0 ? availabilities[0].selectione_les_jours_a_la_vance : 0,
+                advanceBookingDays: d.selectione_les_jours_a_la_vance || 0,
                 schedule: schedule,
                 createdAt: d.created_at
             }
