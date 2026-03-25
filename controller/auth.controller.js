@@ -332,117 +332,7 @@ export const getCurrentDoctor = async (req, res) => {
     }
 };
 
-// ─── PATIENT AUTH ─────────────────────────────────────────────────────────────
-
-/**
- * POST /auth/patient/signup
- * Table: patient (was patient_users)
- * Fields: firstname, lastname, birthdate (no email)
- */
-export const patientSignUp = async (req, res) => {
-    try {
-        const { firstName, lastName, phone, password, address, birthDate, gender, wilayaId, communId } = req.body;
-
-        if (!firstName || !lastName || !phone || !password) {
-            return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
-        }
-
-        if (!passwordRegex.test(password)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule et un chiffre'
-            });
-        }
-
-        const [existing] = await pool.query('SELECT id FROM patient WHERE phone = ?', [phone]);
-        if (existing.length > 0) {
-            return res.status(409).json({ success: false, message: 'Ce numéro est déjà utilisé' });
-        }
-
-        const passwordHash = await bcrypt.hash(password, 10);
-
-        const [result] = await pool.query(
-            `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender, wilaya_id, commun_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [firstName, lastName, phone, passwordHash, address || null, birthDate || null, gender || 'male', wilayaId || null, communId || null]
-        );
-
-        const patientId = result.insertId;
-        const token = signToken({ patientId, phone, role: 'patient' }, '30d');
-
-        res.status(201).json({
-            success: true,
-            message: 'Compte patient créé',
-            token,
-            patient: { id: patientId, firstName, lastName, phone, wilayaId, communId }
-        });
-
-    } catch (error) {
-        console.error('patientSignUp error:', error);
-        res.status(500).json({ success: false, message: 'Erreur serveur' });
-    }
-};
-
-/**
- * POST /auth/patient/signin
- */
-export const patientSignIn = async (req, res) => {
-    try {
-        const { phone, password } = req.body;
-
-        if (!phone || !password) {
-            return res.status(400).json({ success: false, message: 'Téléphone et mot de passe requis' });
-        }
-
-        const [users] = await pool.query(
-            `SELECT p.*, w.name AS wilaya_name, cm.name AS commun_name
-             FROM patient p
-             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
-             LEFT JOIN commun cm ON p.commun_id = cm.id
-             WHERE p.phone = ?`,
-            [phone]
-        );
-
-        if (users.length === 0) {
-            return res.status(401).json({ success: false, message: 'Identifiants invalides' });
-        }
-
-        const user = users[0];
-        const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) {
-            return res.status(401).json({ success: false, message: 'Identifiants invalides' });
-        }
-
-        const token = signToken({ patientId: user.id, phone: user.phone, role: 'patient' }, '30d');
-
-        res.status(200).json({
-            success: true,
-            token,
-            patient: {
-                id: user.id,
-                firstName: user.firstname,
-                lastName: user.lastname,
-                phone: user.phone,
-                address: user.address,
-                birthDate: user.birthdate,
-                gender: user.gender,
-                wilayaId: user.wilaya_id,
-                wilaya: user.wilaya_name,
-                communId: user.commun_id,
-                commune: user.commun_name,
-                isVerified: user.is_verified === 1
-            }
-        });
-
-    } catch (error) {
-        console.error('patientSignIn error:', error);
-        res.status(500).json({ success: false, message: 'Erreur serveur' });
-    }
-};
-
-// ─── PASSWORD RESET (DISABLED — schema columns missing) ───────────────────────
-// The new doctor/patient tables do NOT have: email, reset_token, reset_token_expires
-// These endpoints return 501 until those columns are added to the DB.
+// ─── DOCTOR PASSWORD RESET ───────────────────────────────────────────────────
 
 export const forgotPassword = async (req, res) => {
     res.status(501).json({
@@ -452,16 +342,5 @@ export const forgotPassword = async (req, res) => {
 };
 
 export const resetPassword = async (req, res) => {
-    res.status(501).json({ success: false, message: 'Fonctionnalité non disponible.' });
-};
-
-export const patientForgotPassword = async (req, res) => {
-    res.status(501).json({
-        success: false,
-        message: 'Réinitialisation par email non disponible dans le schéma actuel.'
-    });
-};
-
-export const patientResetPassword = async (req, res) => {
     res.status(501).json({ success: false, message: 'Fonctionnalité non disponible.' });
 };

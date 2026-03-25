@@ -2,11 +2,7 @@
 import jwt from 'jsonwebtoken';
 import pool from '../database.js';
 
-/**
- * Verify doctor JWT token.
- * Table: doctor (was: doctors)
- * No email column in new schema — uses phone.
- */
+
 export const verifyToken = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -65,9 +61,6 @@ export const verifyToken = async (req, res, next) => {
     }
 };
 
-/**
- * Optional doctor auth — does not block if no token.
- */
 export const optionalAuth = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -96,41 +89,5 @@ export const optionalAuth = async (req, res, next) => {
         next();
     } catch (error) {
         next(); // continue silently on error
-    }
-};
-
-/**
- * Verify patient JWT token.
- * Table: patient (was: patient_users)
- * No email in new schema.
- */
-export const verifyPatientToken = async (req, res, next) => {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ success: false, message: 'Non autorisé' });
-        }
-
-        const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        if (decoded.role !== 'patient') {
-            return res.status(403).json({ success: false, message: 'Patients uniquement' });
-        }
-
-        // Updated: table is now 'patient' (was 'patient_users')
-        const [users] = await pool.query(
-            'SELECT id, phone FROM patient WHERE id = ?',
-            [decoded.patientId]
-        );
-
-        if (users.length === 0) {
-            return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
-        }
-
-        req.patient = { id: users[0].id, phone: users[0].phone };
-        next();
-    } catch (error) {
-        return res.status(401).json({ success: false, message: 'Session invalide' });
     }
 };
