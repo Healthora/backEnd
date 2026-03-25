@@ -116,7 +116,11 @@ export const updateProfilSetting = async (req, res) => {
         }
 
         await connection.commit();
-        res.status(200).json({ success: true, message: 'Profil mis à jour' });
+        res.status(200).json({ 
+            success: true, 
+            message: 'Profil mis à jour',
+            data: { firstName, lastName, phone, specialtyId, bio }
+        });
     } catch (error) {
         await connection.rollback();
         res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour' });
@@ -156,7 +160,11 @@ export const updateCabinetSetting = async (req, res) => {
         if (schedule) await syncAvailabilities(connection, doctorId, schedule);
 
         await connection.commit();
-        res.status(200).json({ success: true, message: 'Cabinet mis à jour' });
+        res.status(200).json({ 
+            success: true, 
+            message: 'Cabinet mis à jour',
+            data: { cabinetName, wilayaId, communId, cabinetAddress, schedule }
+        });
     } catch (error) {
         if (connection) await connection.rollback();
         res.status(500).json({ success: false, message: 'Erreur' });
@@ -182,7 +190,11 @@ export const updateRDVSetting = async (req, res) => {
             await connection.commit();
         }
 
-        res.status(200).json({ success: true, message: 'Paramètres RDV mis à jour' });
+        res.status(200).json({ 
+            success: true, 
+            message: 'Paramètres RDV mis à jour',
+            data: { onlineBooking, consultationDuration, schedule }
+        });
     } catch (error) {
         if (connection) await connection.rollback();
         res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour des RDV' });
