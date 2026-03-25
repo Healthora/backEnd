@@ -153,7 +153,7 @@ export const addPatient = async (req, res, next) => {
             const [insertResult] = await connection.query(
                 `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender, wilaya_id, commun_id)
                  VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)`,
-                [firstName, lastName, phone, address || null, birthday || null, gender || 'male', wilayaId || null, communId || null]
+                [firstName, lastName, phone, address || null, birthday || null, (gender === 'female' || gender === 'F') ? 'female' : 'male', wilayaId || null, communId || null]
             );
             patientId = insertResult.insertId;
         }
@@ -228,7 +228,10 @@ export const updatePatient = async (req, res, next) => {
         if (lastName  !== undefined) { updates.push('lastname = ?');  values.push(lastName);  }
         if (phone     !== undefined) { updates.push('phone = ?');     values.push(phone);     }
         if (birthday  !== undefined) { updates.push('birthdate = ?'); values.push(birthday || null); }
-        if (gender    !== undefined) { updates.push('gender = ?');    values.push(gender);    }
+        if (gender    !== undefined) { 
+            updates.push('gender = ?');    
+            values.push((gender === 'female' || gender === 'F') ? 'female' : 'male'); 
+        }
         if (address   !== undefined) { updates.push('address = ?');   values.push(address || null); }
         if (wilayaId  !== undefined) { updates.push('wilaya_id = ?');  values.push(wilayaId || null); }
         if (communId  !== undefined) { updates.push('commun_id = ?');  values.push(communId || null); }
