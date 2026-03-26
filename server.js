@@ -8,7 +8,13 @@ import appointmentRouter from './Router/appointment.router.js';
 import ordonnanceRouter from './Router/ordonnance.router.js';
 import locationRouter from './Router/location.router.js';
 import specialityRouter from './Router/speciality.router.js';
+import patientAuthRouter from './Router/patientAuth.router.js';
+// import discoveryRouter from './Router/discovery.router.js';
+// import patientAppointmentRouter from './Router/patientAppointment.router.js';
 import pool from './database.js';
+
+
+
 
 dotenv.config();
 
@@ -23,18 +29,18 @@ pool.getConnection()
   .catch(err => {
     console.error("❌ Database connection failed during startup:", err.message);
     if (err.code === 'ETIMEDOUT') {
-        console.error("💡 Hint: Your connection is timing out. If you are using the public Railway URL (tramway.proxy.rlwy.net), you MUST specify the MYSQLPORT from your Railway dashboard.");
+      console.error("💡 Hint: Your connection is timing out. If you are using the public Railway URL (tramway.proxy.rlwy.net), you MUST specify the MYSQLPORT from your Railway dashboard.");
     }
   });
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://healthoraweb.netlify.app'];
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    
+
     // Automatically allow local network IPs for testing on mobile devices
     if (allowedOrigins.includes(origin) || origin.match(/^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/)) {
       callback(null, true);
@@ -52,6 +58,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use('/auth', authRouter);
+app.use('/patient-auth', patientAuthRouter);
 app.use('/setting', settingRouter);
 app.use('/patient', patientRoute);
 app.use('/appointments', appointmentRouter);
@@ -59,14 +66,16 @@ app.use('/ordonnance', ordonnanceRouter);
 app.use('/location', locationRouter);
 app.use('/speciality', specialityRouter);
 
+
+
 app.get('/', (req, res) => {
-    res.send("Server is running");
+  res.send("Server is running");
 });
 
 const PORT = process.env.PORT || 3000;
-const HOST = '0.0.0.0'; 
+const HOST = '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
-    console.log(`Server is running on ${HOST}:${PORT}`);
-    console.log(`CORS enabled for: ${allowedOrigins.join(', ')}`);
+  console.log(`Server is running on ${HOST}:${PORT}`);
+  console.log(`CORS enabled for: ${allowedOrigins.join(', ')}`);
 });
