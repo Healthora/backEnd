@@ -136,11 +136,20 @@ export const patientSignUp = async (req, res) => {
             });
         }
 
-        // Insert patient
+        // Insert patient 
         const [result] = await connection.query(
             `INSERT INTO patient (firstname, lastname, phone, wilaya_id, commun_id, address, birthdate, gender, is_verified)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-            [firstname, lastname, phone, wilaya_id, commun_id, address, birthdate, gender]
+            [
+                firstname, 
+                lastname, 
+                phone, 
+                wilaya_id || null, 
+                commun_id || null, 
+                address || null, 
+                birthdate || null, 
+                (gender === 'F' || gender === 'female') ? 'female' : 'male'
+            ]
         );
 
         const patientId = result.insertId;
