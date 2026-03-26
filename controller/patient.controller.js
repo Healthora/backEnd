@@ -151,8 +151,8 @@ export const addPatient = async (req, res, next) => {
         } else {
             // Create new patient (no email, no password — doctor-added patients start unverified)
             const [insertResult] = await connection.query(
-                `INSERT INTO patient (firstname, lastname, phone, password, address, birthdate, gender, wilaya_id, commun_id)
-                 VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)`,
+                `INSERT INTO patient (firstname, lastname, phone, address, birthdate, gender, wilaya_id, commun_id, is_verified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
                 [firstName, lastName, phone, address || null, birthday || null, (gender === 'female' || gender === 'F') ? 'female' : 'male', wilayaId || null, communId || null]
             );
             patientId = insertResult.insertId;
