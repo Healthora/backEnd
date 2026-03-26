@@ -11,6 +11,35 @@ import pool from "../database.js";
  * No email column in new patient table.
  */
 
+// ─── SEARCH ALL APP PATIENTS ────────────────────────────────────────────────
+export const searchAppUsers = async (req, res, next) => {
+    try {
+        const searchTerm = req.query.search || '';
+        if (searchTerm.length < 2) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        const like = `%${searchTerm}%`;
+        const [rows] = await pool.query(
+            `SELECT p.id, p.firstname AS first_name, p.lastname AS last_name, p.phone,
+                    p.address, p.birthdate AS birth_date, p.gender, p.is_verified, p.created_at,
+                    w.name AS wilaya, p.wilaya_id, cm.name AS commune, p.commun_id
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.is_verified = 1 
+               AND (p.firstname LIKE ? OR p.lastname LIKE ? OR p.phone LIKE ?)
+             LIMIT 30`,
+            [like, like, like]
+        );
+
+        res.status(200).json({ success: true, data: rows });
+    } catch (err) {
+        console.error('searchAppUsers error:', err);
+        res.status(500).json({ success: false, message: 'Erreur serveur lors de la recherche globale.' });
+    }
+};
+
 // ─── GET ALL PATIENTS FOR A DOCTOR ───────────────────────────────────────────
 
 export const getAllPatient = async (req, res, next) => {
