@@ -53,8 +53,8 @@ export const createAppointment = async (req, res) => {
             [doctor_id, dayOfWeek]
         );
 
-        if (docConstraints) {
-            // Advance Booking Range
+        if (docConstraints && is_external_user) {
+            // Advance Booking Range (only applies to patients booking online)
             if (docConstraints.selectione_les_jours_a_la_vance > 0) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -300,9 +300,10 @@ export const getAvailableSlots = async (req, res) => {
         const [[doc]] = await pool.query('SELECT slot_duration, selectione_les_jours_a_la_vance FROM doctor WHERE id = ?', [doctorId]);
         const slotDuration = doc?.slot_duration || 30;
         const advanceDays = doc?.selectione_les_jours_a_la_vance || 0;
+        const is_external_user = req.query.is_external_user === 'true';
 
-        // 1. Check max days in advance
-        if (advanceDays > 0) {
+        // 1. Check max days in advance (Only for patients booking online)
+        if (advanceDays > 0 && is_external_user) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const diffTime = dObj.getTime() - today.getTime();
