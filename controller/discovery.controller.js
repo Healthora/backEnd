@@ -24,7 +24,7 @@ export const searchDoctors = async (req, res) => {
         const { query, specialityId } = req.query;
         let sql = `
             SELECT 
-                d.id, d.firstname, d.lastname, d.bio, d.img_url, d.is_verified, d.slot_duration,
+                d.*,
                 GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') as specialities,
                 GROUP_CONCAT(DISTINCT s.id SEPARATOR ',') as speciality_ids,
                 c.name as cabinet_name, c.address as cabinet_address,
