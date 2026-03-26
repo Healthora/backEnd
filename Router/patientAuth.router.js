@@ -2,7 +2,8 @@ import { Router } from "express";
 import {
     checkPhone,
     verifyOtp,
-    patientSignUp
+    patientSignUp,
+    logout
 } from "../controller/patient.auth.controller.js";
 
 const patientAuthRouter = Router();
@@ -15,5 +16,8 @@ patientAuthRouter.post('/verify-otp', verifyOtp);
 
 // Route for patient signup
 patientAuthRouter.post('/signup', patientSignUp);
+
+// Logout route
+patientAuthRouter.post('/logout', logout);
 
 export default patientAuthRouter;

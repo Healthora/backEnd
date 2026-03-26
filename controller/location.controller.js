@@ -26,7 +26,7 @@ export const getCommunesByWilaya = async (req, res) => {
             return res.status(400).json({ success: false, message: 'wilayaId invalide' });
         }
         const [rows] = await pool.query(
-            'SELECT id, name FROM commun WHERE wilaya_id = ? ORDER BY name',
+            'SELECT id, name, wilaya_id FROM commun WHERE wilaya_id = ? ORDER BY name',
             [wilayaId]
         );
         res.status(200).json({ success: true, data: rows });

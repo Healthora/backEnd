@@ -177,3 +177,11 @@ export const patientSignUp = async (req, res) => {
         connection.release();
     }
 };
+
+/**
+ * Logout
+ * POST /patient-auth/logout
+ */
+export const logout = async (req, res) => {
+    res.status(200).json({ success: true, message: 'Déconnexion réussie' });
+};
