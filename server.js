@@ -9,8 +9,7 @@ import ordonnanceRouter from './Router/ordonnance.router.js';
 import locationRouter from './Router/location.router.js';
 import specialityRouter from './Router/speciality.router.js';
 import patientAuthRouter from './Router/patientAuth.router.js';
-// import discoveryRouter from './Router/discovery.router.js';
-// import patientAppointmentRouter from './Router/patientAppointment.router.js';
+import discoveryRouter from './Router/discovery.router.js';
 import pool from './database.js';
 
 
@@ -65,6 +64,7 @@ app.use('/appointments', appointmentRouter);
 app.use('/ordonnance', ordonnanceRouter);
 app.use('/location', locationRouter);
 app.use('/speciality', specialityRouter);
+app.use('/discovery', discoveryRouter);
 
 
 
