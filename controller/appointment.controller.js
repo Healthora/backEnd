@@ -36,7 +36,8 @@ export const createAppointment = async (req, res) => {
             : 'en attente';
 
         // 2. Constraints Check
-        const dObj = new Date(appointment_date);
+        const [year, month, day] = appointment_date.split('-');
+        const dObj = new Date(year, month - 1, day);
         
         // Fetch doctor global constraints
         const [[docConstraints]] = await pool.query(
@@ -283,7 +284,8 @@ export const getAvailableSlots = async (req, res) => {
 
         if (!date) return res.status(400).json({ success: false, message: 'Date requise' });
 
-        const dObj = new Date(date);
+        const [year, month, day] = date.split('-');
+        const dObj = new Date(year, month - 1, day);
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const dayOfWeek = dayNames[dObj.getDay()];
 
