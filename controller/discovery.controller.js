@@ -55,7 +55,7 @@ export const searchDoctors = async (req, res) => {
             params.push(wilayaId);
         }
 
-        sql += ` GROUP BY d.id ORDER BY d.is_verified DESC, d.lastname ASC`;
+        sql += ` GROUP BY d.id, c.name, c.address, w.name, cm.name ORDER BY d.is_verified DESC, d.lastname ASC`;
 
         if (limit && !isNaN(parseInt(limit))) {
             sql += ` LIMIT ?`;
@@ -96,7 +96,7 @@ export const getDoctorDetails = async (req, res) => {
             LEFT JOIN wilaya w ON c.wilaya_id = w.id
             LEFT JOIN commun cm ON c.commun_id = cm.id
             WHERE d.id = ?
-            GROUP BY d.id
+            GROUP BY d.id, c.name, c.address, w.name, cm.name
         `, [id]);
 
         if (doctorRows.length === 0) {
