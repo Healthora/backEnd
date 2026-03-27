@@ -2,17 +2,24 @@ import { Router } from "express";
 import { 
     getSpecialities, 
     searchDoctors, 
-    getDoctorDetails 
+    getDoctorDetails,
+    getPatientAppointments,
+    getAvailableSlotsForPatient,
+    bookAppointmentAsPatient,
+    cancelAppointmentAsPatient,
 } from "../controller/discovery.controller.js";
 import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
 const discoveryRouter = Router();
 
-// Routes for doctor discovery
-// Specialities are public (needed before login for signup flow)
+// Public
 discoveryRouter.get('/specialities', getSpecialities);
-// Search and details require an authenticated patient
+// Authenticated patient
 discoveryRouter.get('/search', verifyPatientToken, searchDoctors);
 discoveryRouter.get('/doctor-details/:id', verifyPatientToken, getDoctorDetails);
+discoveryRouter.get('/available-slots', verifyPatientToken, getAvailableSlotsForPatient);
+discoveryRouter.get('/my-appointments', verifyPatientToken, getPatientAppointments);
+discoveryRouter.post('/book', verifyPatientToken, bookAppointmentAsPatient);
+discoveryRouter.put('/cancel/:id', verifyPatientToken, cancelAppointmentAsPatient);
 
 export default discoveryRouter;
