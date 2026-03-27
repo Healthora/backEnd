@@ -17,11 +17,11 @@ export const getSpecialities = async (req, res) => {
 };
 
 /**
- * Search doctors by name and/or speciality
+ * Search doctors by name and/or speciality and/or wilaya
  */
 export const searchDoctors = async (req, res) => {
     try {
-        const { query, specialityId } = req.query;
+        const { query, specialityId, wilayaId, limit } = req.query;
         let sql = `
             SELECT 
                 d.*,
@@ -50,7 +50,17 @@ export const searchDoctors = async (req, res) => {
             params.push(specialityId);
         }
 
+        if (wilayaId) {
+            sql += ` AND c.wilaya_id = ?`;
+            params.push(wilayaId);
+        }
+
         sql += ` GROUP BY d.id ORDER BY d.is_verified DESC, d.lastname ASC`;
+
+        if (limit && !isNaN(parseInt(limit))) {
+            sql += ` LIMIT ?`;
+            params.push(parseInt(limit));
+        }
 
         const [rows] = await pool.query(sql, params);
 
@@ -63,6 +73,7 @@ export const searchDoctors = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
+
 
 /**
  * Get doctor details including availability
