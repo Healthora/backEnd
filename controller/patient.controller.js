@@ -182,6 +182,7 @@ export const addPatient = async (req, res, next) => {
         await connection.query(
             'INSERT INTO patient_doctor (patient_id, doctor_id) VALUES (?, ?)',
             [patientId, doctorId]
+            
         );
 
         await connection.commit();
