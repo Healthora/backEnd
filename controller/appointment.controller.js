@@ -263,7 +263,7 @@ export const getAppointmentsByPatient = async (req, res) => {
             `SELECT id, doctor_id, patient_id, 
                     DATE_FORMAT(appointment_date, '%Y-%m-%d') AS appointment_date,
                     DATE_FORMAT(start_time, '%H:%i') AS start_time,
-                    status, note_doctor
+                    status, note_doctor as notes, duration
              FROM appointment
              WHERE patient_id = ? AND doctor_id = ?
              ORDER BY appointment_date DESC`,

@@ -116,7 +116,7 @@ export const getOrdonnancesByPatientId = async (req, res) => {
   try {
     const { patient_id } = req.params;
     const [rows] = await pool.query(
-      `SELECT * FROM ordonnance WHERE patient_id = ? AND doctor_id = ? ORDER BY created_at DESC`,
+      `SELECT *, file_url as cloudinary_url FROM ordonnance WHERE patient_id = ? AND doctor_id = ? ORDER BY created_at DESC`,
       [patient_id, req.doctor.doctorId]
     );
     res.status(200).json({ success: true, data: rows });
@@ -128,7 +128,7 @@ export const getOrdonnancesByPatientId = async (req, res) => {
 export const getOrdonnancesByDoctor = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT * FROM ordonnance WHERE doctor_id = ? ORDER BY created_at DESC`,
+      `SELECT *, file_url as cloudinary_url FROM ordonnance WHERE doctor_id = ? ORDER BY created_at DESC`,
       [req.doctor.doctorId]
     );
     res.status(200).json({ success: true, data: rows });

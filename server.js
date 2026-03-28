@@ -10,6 +10,7 @@ import locationRouter from './Router/location.router.js';
 import specialityRouter from './Router/speciality.router.js';
 import patientAuthRouter from './Router/patientAuth.router.js';
 import discoveryRouter from './Router/discovery.router.js';
+import medicalRecordsRouter from './Router/medical_records.router.js';
 import pool from './database.js';
 
 
@@ -65,6 +66,7 @@ app.use('/ordonnance', ordonnanceRouter);
 app.use('/location', locationRouter);
 app.use('/speciality', specialityRouter);
 app.use('/discovery', discoveryRouter);
+app.use('/medical-records', medicalRecordsRouter);
 
 
 
