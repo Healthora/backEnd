@@ -195,6 +195,60 @@ export const patientSignUp = async (req, res) => {
 };
 
 /**
+ * Update Patient Profile
+ * PUT /patient-auth/profile
+ */
+export const updateProfile = async (req, res) => {
+    try {
+        const patientId = req.patient.patientId;
+        const {
+            firstname,
+            lastname,
+            wilaya_id,
+            commun_id,
+            address,
+            birthdate,
+            gender
+        } = req.body;
+
+        await pool.query(
+            `UPDATE patient 
+             SET firstname = ?, lastname = ?, wilaya_id = ?, commun_id = ?, address = ?, birthdate = ?, gender = ?
+             WHERE id = ?`,
+            [
+                firstname,
+                lastname,
+                wilaya_id || null,
+                commun_id || null,
+                address || null,
+                birthdate || null,
+                (gender === 'F' || gender === 'female') ? 'female' : 'male',
+                patientId
+            ]
+        );
+
+        // Fetch updated info
+        const [patients] = await pool.query(
+            `SELECT p.*, w.name AS wilaya_name, cm.name AS commune_name
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.id = ?`,
+            [patientId]
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Profil mis à jour',
+            data: patients[0]
+        });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour du profil' });
+    }
+};
+
+/**
  * Logout
  * POST /patient-auth/logout
  */
