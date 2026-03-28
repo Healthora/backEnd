@@ -162,6 +162,11 @@ export const updateCabinetSetting = async (req, res) => {
         }
 
         if (schedule) await syncAvailabilities(connection, doctorId, schedule);
+        
+        // Ensure advance booking days are updated in the doctor table
+        if (advanceBookingDays !== undefined) {
+            await connection.query('UPDATE doctor SET selectione_les_jours_a_la_vance = ? WHERE id = ?', [advanceBookingDays || 0, doctorId]);
+        }
 
         await connection.commit();
         res.status(200).json({

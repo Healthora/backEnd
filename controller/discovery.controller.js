@@ -220,7 +220,7 @@ export const getAvailableSlotsForPatient = async (req, res) => {
 
         // 1. Get doctor settings
         const [[doc]] = await pool.query(
-            'SELECT slot_duration, selectione_les_jours_a_la_vance FROM doctor WHERE id = ?',
+            'SELECT slot_duration, selectione_les_jours_a_la_vance, is_reservation_online FROM doctor WHERE id = ?',
             [doctorId]
         );
 
@@ -228,8 +228,17 @@ export const getAvailableSlotsForPatient = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Docteur non trouvé' });
         }
 
+        // 1.5 Check if doctor accepts online reservations
+        if (doc.is_reservation_online === 0) {
+            return res.status(200).json({ 
+                success: true, 
+                data: [], 
+                message: 'Les réservations en ligne sont désactivées pour ce docteur.' 
+            });
+        }
+
         const slotDuration = doc.slot_duration || 30;
-        const daysInAdvance = doc.selectione_les_jours_a_la_vance || 15;
+        const daysInAdvance = doc.selectione_les_jours_a_la_vance === 0 ? 365 : (doc.selectione_les_jours_a_la_vance || 15);
 
         // 2. Validate booking window
         const today = new Date();
@@ -313,7 +322,11 @@ export const getAvailableSlotsForPatient = async (req, res) => {
         res.status(200).json({ 
             success: true, 
             data: available,
-            message: available.length === 0 ? (isToday && allSlots.length > 0 ? 'Plus de créneaux disponible pour aujourd\'hui' : 'Aucun créneau disponible') : null
+            message: available.length === 0 
+                ? (isToday && allSlots.length > 0 
+                    ? 'Plus de créneaux disponible pour aujourd\'hui' 
+                    : (allSlots.length === 0 ? 'Cabinet fermé ce jour-là' : 'Ce jour est complet')) 
+                : null
         });
     } catch (error) {
         console.error('getAvailableSlotsForPatient error:', error);
