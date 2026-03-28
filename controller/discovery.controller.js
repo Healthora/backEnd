@@ -21,7 +21,7 @@ export const getSpecialities = async (req, res) => {
  */
 export const searchDoctors = async (req, res) => {
     try {
-        const { query, specialityId, wilayaId, limit } = req.query;
+        const { query, specialityId, wilayaId, communeId, availability, limit } = req.query;
         let sql = `
             SELECT 
                 d.*,
@@ -53,6 +53,24 @@ export const searchDoctors = async (req, res) => {
         if (wilayaId) {
             sql += ` AND c.wilaya_id = ?`;
             params.push(wilayaId);
+        }
+
+        if (communeId) {
+            sql += ` AND c.commun_id = ?`;
+            params.push(communeId);
+        }
+
+        if (availability) {
+            let days = 30; // Default this month
+            if (availability === "Aujourd'hui") days = 0;
+            else if (availability === "Cette semaine") days = 7;
+
+            sql += ` AND d.id IN (
+                SELECT a.doctor_id 
+                FROM availability a 
+                WHERE CURDATE() <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+            )`;
+            params.push(days);
         }
 
         sql += ` GROUP BY d.id, c.name, c.address, w.name, cm.name ORDER BY d.is_verified DESC, d.lastname ASC`;
@@ -177,10 +195,38 @@ export const getAvailableSlotsForPatient = async (req, res) => {
             return res.status(400).json({ success: false, message: 'doctorId et date sont requis' });
         }
 
-        const [year, month, day] = date.split('-');
-        const dObj = new Date(year, month - 1, day);
+        // 1. Get doctor settings
+        const [[doc]] = await pool.query(
+            'SELECT slot_duration, selectione_les_jours_a_la_vance FROM doctor WHERE id = ?',
+            [doctorId]
+        );
+
+        if (!doc) {
+            return res.status(404).json({ success: false, message: 'Docteur non trouvé' });
+        }
+
+        const slotDuration = doc.slot_duration || 30;
+        const daysInAdvance = doc.selectione_les_jours_a_la_vance || 15;
+
+        // 2. Validate booking window
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const targetDate = new Date(date);
+        targetDate.setHours(0,0,0,0);
+        
+        const diffTime = targetDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0 || diffDays > daysInAdvance) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Réservation possible uniquement dans les ${daysInAdvance} prochains jours` 
+            });
+        }
+
+        // 3. Get availability for that day
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayOfWeek = dayNames[dObj.getDay()];
+        const dayOfWeek = dayNames[targetDate.getDay()];
 
         const [availabilities] = await pool.query(
             'SELECT start_time, end_time, selectione_les_number_of_appoi_by_day FROM availability WHERE doctor_id = ? AND day_of_week = ?',
@@ -191,13 +237,7 @@ export const getAvailableSlotsForPatient = async (req, res) => {
             return res.status(200).json({ success: true, data: [], message: 'Cabinet fermé ce jour-là' });
         }
 
-        const [[doc]] = await pool.query(
-            'SELECT slot_duration, selectione_les_jours_a_la_vance FROM doctor WHERE id = ?',
-            [doctorId]
-        );
-        const slotDuration = doc?.slot_duration || 30;
-
-        // Build all theoretical slots
+        // 4. Build all theoretical slots
         let allSlots = [];
         for (const av of availabilities) {
             const start = av.start_time.substring(0, 5);
@@ -212,7 +252,7 @@ export const getAvailableSlotsForPatient = async (req, res) => {
             }
         }
 
-        // Fetch booked slots
+        // 5. Fetch booked slots
         const [booked] = await pool.query(
             `SELECT DATE_FORMAT(start_time, '%H:%i') AS start_time, duration
              FROM appointment
@@ -220,23 +260,38 @@ export const getAvailableSlotsForPatient = async (req, res) => {
             [doctorId, date]
         );
 
-        // Check max per day
+        // 6. Check daily cap
         const maxPerDay = availabilities[0].selectione_les_number_of_appoi_by_day || 0;
         if (maxPerDay > 0 && booked.length >= maxPerDay) {
-            return res.status(200).json({ success: true, data: [], message: 'Journée complète' });
+            return res.status(200).json({ success: true, data: [], message: 'Complet - Limite quotidienne atteinte', isFullyBooked: true });
         }
+
+        // 7. Filter slots (booked + past if today)
+        const now = new Date();
+        const isToday = targetDate.toDateString() === now.toDateString();
+        const currentMins = now.getHours() * 60 + now.getMinutes();
 
         const available = allSlots.filter(slot => {
             const [h, m] = slot.split(':').map(Number);
             const slotMins = h * 60 + m;
+
+            // Filter past slots if today
+            if (isToday && slotMins <= currentMins) return false;
+
+            // Filter booked slots
             return !booked.some(b => {
                 const [bh, bm] = b.start_time.split(':').map(Number);
                 const bStart = bh * 60 + bm;
-                return slotMins >= bStart && slotMins < bStart + (b.duration || slotDuration);
+                const bDur = b.duration || slotDuration;
+                return slotMins >= bStart && slotMins < bStart + bDur;
             });
         });
 
-        res.status(200).json({ success: true, data: available });
+        res.status(200).json({ 
+            success: true, 
+            data: available,
+            message: available.length === 0 ? (isToday && allSlots.length > 0 ? 'Plus de créneaux disponible pour aujourd\'hui' : 'Aucun créneau disponible') : null
+        });
     } catch (error) {
         console.error('getAvailableSlotsForPatient error:', error);
         res.status(500).json({ success: false, message: 'Erreur serveur' });
