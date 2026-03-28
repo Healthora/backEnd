@@ -163,20 +163,11 @@ export const addPatient = async (req, res, next) => {
         let patientId;
 
         if (existingPatient.length > 0) {
-            patientId = existingPatient[0].id;
-
-            // Check if already linked to this doctor
-            const [existingLink] = await connection.query(
-                'SELECT id FROM patient_doctor WHERE patient_id = ? AND doctor_id = ?',
-                [patientId, doctorId]
-            );
-            if (existingLink.length > 0) {
-                await connection.rollback();
-                return res.status(409).json({
-                    success: false,
-                    message: 'Ce patient est déjà dans votre liste'
-                });
-            }
+            await connection.rollback();
+            return res.status(409).json({
+                success: false,
+                message: 'Ce numéro de téléphone existe déjà dans la base des patients.'
+            });
         } else {
             // Create new patient (no email, no password — doctor-added patients start unverified)
             const [insertResult] = await connection.query(
