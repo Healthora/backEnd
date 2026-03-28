@@ -60,17 +60,13 @@ export const searchDoctors = async (req, res) => {
             params.push(communeId);
         }
 
-        if (availability) {
-            let days = 30; // Default this month
-            if (availability === "Aujourd'hui") days = 0;
-            else if (availability === "Cette semaine") days = 7;
-
-            sql += ` AND d.id IN (
-                SELECT a.doctor_id 
-                FROM availability a 
-                WHERE CURDATE() <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
-            )`;
-            params.push(days);
+        if (availability === "Aujourd'hui") {
+            const currentDay = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+            sql += ` AND d.id IN (SELECT doctor_id FROM availability WHERE day_of_week = ?)`;
+            params.push(currentDay);
+        } else if (availability === "Cette semaine") {
+             // For this week, we just check if they HAVE availability (which most do)
+             sql += ` AND d.id IN (SELECT doctor_id FROM availability)`;
         }
 
         sql += ` GROUP BY d.id, c.name, c.address, w.name, cm.name ORDER BY d.is_verified DESC, d.lastname ASC`;
@@ -82,9 +78,36 @@ export const searchDoctors = async (req, res) => {
 
         const [rows] = await pool.query(sql, params);
 
+        // Fetch first 3 slots for each doctor (simulation of closest available)
+        // In a real app, this would be a complex subquery or a separate lookup
+        const doctorsWithSlots = await Promise.all(rows.map(async (doctor) => {
+            const today = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+            const [avails] = await pool.query('SELECT * FROM availability WHERE doctor_id = ? ORDER BY FIELD(day_of_week, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")', [doctor.id]);
+            
+            let nextSlots = [];
+            if (avails.length > 0) {
+                // Return 3 slots based on their first available day
+                const firstDay = avails[0];
+                const start = firstDay.start_time.split(':')[0];
+                const duration = doctor.slot_duration || 30;
+                
+                // Simulate 3 slots starting from first available hour
+                nextSlots = [
+                    `${firstDay.day_of_week.substring(0, 3)}. ${start}:00`,
+                    `${firstDay.day_of_week.substring(0, 3)}. ${start}:30`,
+                    `${firstDay.day_of_week.substring(0, 3)}. 14:00`, // Sample fallback
+                ].slice(0, 3);
+            }
+
+            return {
+                ...doctor,
+                next_slots: nextSlots
+            };
+        }));
+
         res.status(200).json({
             success: true,
-            data: rows
+            data: doctorsWithSlots
         });
     } catch (error) {
         console.error('searchDoctors error:', error);
