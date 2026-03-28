@@ -60,13 +60,8 @@ export const searchDoctors = async (req, res) => {
             params.push(communeId);
         }
 
-        if (availability === "Aujourd'hui") {
-            const currentDay = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
-            sql += ` AND d.id IN (SELECT doctor_id FROM availability WHERE day_of_week = ?)`;
-            params.push(currentDay);
-        } else if (availability === "Cette semaine") {
-             // For this week, we just check if they HAVE availability (which most do)
-             sql += ` AND d.id IN (SELECT doctor_id FROM availability)`;
+        if (availability === "Online") {
+            sql += ` AND d.is_reservation_online = 1`;
         }
 
         sql += ` GROUP BY d.id, c.name, c.address, w.name, cm.name ORDER BY d.is_verified DESC, d.lastname ASC`;
