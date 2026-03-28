@@ -1,0 +1,36 @@
+[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+
+=== Doctor: issam kebdani (ID: 1) ===
+  - Friday: 08:00:00 to 12:00:00 (Cap: 0)
+  - Saturday: 08:00:00 to 12:00:00 (Cap: 3)
+
+=== Doctor: Boumedien 9aloumba (ID: 2) ===
+  - Monday: 09:00:00 to 16:00:00 (Cap: 9)
+  - Monday: 16:00:00 to 20:00:00 (Cap: 9)
+
+=== Doctor: Amine Cherif (ID: 3) ===
+  - Monday: 08:00:00 to 12:00:00 (Cap: 0)
+
+=== Doctor: Test Test (ID: 4) ===
+NO AVAILABILITY DEFINED
+
+=== Doctor: adas asda (ID: 5) ===
+NO AVAILABILITY DEFINED
+
+=== Doctor: aymen medelci (ID: 6) ===
+  - Monday: 08:00:00 to 20:00:00 (Cap: 5)
+  - Tuesday: 08:00:00 to 12:00:00 (Cap: 4)
+  - Wednesday: 08:00:00 to 12:00:00 (Cap: 0)
+
+=== Doctor: Bro ook (ID: 7) ===
+  - Sunday: 08:00:00 to 12:00:00 (Cap: 0)
+  - Monday: 08:00:00 to 12:00:00 (Cap: 1)
+  - Tuesday: 08:00:00 to 12:00:00 (Cap: 0)
+  - Wednesday: 08:00:00 to 12:00:00 (Cap: 0)
+  - Thursday: 08:00:00 to 12:00:00 (Cap: 0)
+  - Friday: 08:00:00 to 12:00:00 (Cap: 0)
+  - Saturday: 08:00:00 to 12:00:00 (Cap: 0)
+
+=== Doctor: techiali mohammed (ID: 8) ===
+  - Sunday: 08:00:00 to 12:00:00 (Cap: 2)
+  - Saturday: 08:00:00 to 12:00:00 (Cap: 2)

@@ -12,12 +12,13 @@ import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
 const discoveryRouter = Router();
 
-// Public
+// Public Discovery
 discoveryRouter.get('/specialities', getSpecialities);
+discoveryRouter.get('/search', searchDoctors);
+discoveryRouter.get('/doctor-details/:id', getDoctorDetails);
+discoveryRouter.get('/available-slots', getAvailableSlotsForPatient);
+
 // Authenticated patient
-discoveryRouter.get('/search', verifyPatientToken, searchDoctors);
-discoveryRouter.get('/doctor-details/:id', verifyPatientToken, getDoctorDetails);
-discoveryRouter.get('/available-slots', verifyPatientToken, getAvailableSlotsForPatient);
 discoveryRouter.get('/my-appointments', verifyPatientToken, getPatientAppointments);
 discoveryRouter.post('/book', verifyPatientToken, bookAppointmentAsPatient);
 discoveryRouter.put('/cancel/:id', verifyPatientToken, cancelAppointmentAsPatient);
