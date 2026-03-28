@@ -65,7 +65,11 @@ export const verifyOtp = async (req, res) => {
 
         // For now, accept any OTP
         const [patients] = await pool.query(
-            'SELECT * FROM patient WHERE phone = ?',
+            `SELECT p.*, w.name AS wilaya_name, cm.name AS commune_name
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.phone = ?`,
             [phone]
         );
 
@@ -155,21 +159,24 @@ export const patientSignUp = async (req, res) => {
         const patientId = result.insertId;
         await connection.commit();
 
+        // Fetch newly created patient with names
+        const [patients] = await pool.query(
+            `SELECT p.*, w.name AS wilaya_name, cm.name AS commune_name
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.id = ?`,
+            [patientId]
+        );
+
+        const patient = patients[0];
         const token = signToken({ patientId, phone, role: 'patient' });
 
         res.status(201).json({
             success: true,
             message: 'Compte créé avec succès',
             data: {
-                id: patientId,
-                firstname,
-                lastname,
-                phone,
-                wilaya_id,
-                commun_id,
-                address,
-                birthdate,
-                gender,
+                ...patient,
                 token
             }
         });
