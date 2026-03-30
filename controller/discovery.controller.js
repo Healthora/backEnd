@@ -294,7 +294,9 @@ export const getAvailableSlotsForPatient = async (req, res) => {
         }
 
         // 7. Filter slots (booked + past if today)
-        const now = new Date();
+        // Setup for UTC+1 time (Algeria)
+        const nowLocalStr = new Date().toLocaleString("en-US", { timeZone: "Africa/Algiers" });
+        const now = new Date(nowLocalStr);
         const isToday = targetDate.toDateString() === now.toDateString();
         const currentMins = now.getHours() * 60 + now.getMinutes();
 
@@ -310,7 +312,12 @@ export const getAvailableSlotsForPatient = async (req, res) => {
                 const [bh, bm] = b.start_time.split(':').map(Number);
                 const bStart = bh * 60 + bm;
                 const bDur = b.duration || slotDuration;
-                return slotMins >= bStart && slotMins < bStart + bDur;
+                
+                const slotEndMins = slotMins + slotDuration;
+                const bEnd = bStart + bDur;
+                
+                // Proper overlap detection: (StartA < EndB) and (StartB < EndA)
+                return slotMins < bEnd && bStart < slotEndMins;
             });
         });
 
