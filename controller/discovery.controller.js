@@ -179,6 +179,7 @@ export const getPatientAppointments = async (req, res) => {
                 a.duration, a.status, a.note_doctor, a.note_patient, a.created_at,
                 d.firstname  AS doctor_first_name,
                 d.lastname   AS doctor_last_name,
+                d.phone      AS doctor_phone,
                 d.img_url,
                 s.name       AS specialty,
                 c.name       AS cabinet_name,
