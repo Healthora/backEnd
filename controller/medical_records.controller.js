@@ -31,11 +31,22 @@ export const getMyPrescriptions = async (req, res) => {
             ORDER BY o.created_at DESC
         `, [patientId]);
 
-        // Parse medicaments JSON string if it's a string
-        const formattedRows = rows.map(row => ({
-            ...row,
-            medicaments: typeof row.medicaments === 'string' ? JSON.parse(row.medicaments) : row.medicaments
-        }));
+        // Parse medicaments JSON string safely
+        const formattedRows = rows.map(row => {
+            let parsedMeds = row.medicaments;
+            if (typeof parsedMeds === 'string' && parsedMeds.trim() !== '') {
+                try {
+                    parsedMeds = JSON.parse(parsedMeds);
+                } catch (e) {
+                    // Fallback if it's not valid JSON
+                    parsedMeds = [];
+                }
+            }
+            return {
+                ...row,
+                medicaments: parsedMeds
+            };
+        });
 
         res.status(200).json({
             success: true,
@@ -82,9 +93,18 @@ export const getPrescriptionByAppointment = async (req, res) => {
         }
 
         const row = rows[0];
+        let parsedMedsObj = row.medicaments;
+        if (typeof parsedMedsObj === 'string' && parsedMedsObj.trim() !== '') {
+            try {
+                parsedMedsObj = JSON.parse(parsedMedsObj);
+            } catch (e) {
+                parsedMedsObj = [];
+            }
+        }
+
         const formattedRow = {
             ...row,
-            medicaments: typeof row.medicaments === 'string' ? JSON.parse(row.medicaments) : row.medicaments
+            medicaments: parsedMedsObj
         };
 
         res.status(200).json({
