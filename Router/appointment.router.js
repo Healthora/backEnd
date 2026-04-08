@@ -13,6 +13,7 @@ appointmentRouter.get('/patient/:patientId', getAppointmentsByPatient);
 appointmentRouter.put('/:id/status', updateAppointmentStatus);
 appointmentRouter.put('/:id', updateAppointment);
 
+
 appointmentRouter.delete('/:id', deleteAppointment);
 
 export default appointmentRouter;
