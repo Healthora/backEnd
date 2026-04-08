@@ -413,3 +413,70 @@ export const cancelAppointmentAsPatient = async (req, res) => {
         res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
 };
+/**
+ * GET /discovery/available-dates?doctorId=X
+ * Scans the doctor's schedule and returns a list of dates that are:
+ * 1. Within the booking window
+ * 2. On a working day
+ * 3. Not fully booked (count < daily_limit)
+ */
+export const getAvailableDates = async (req, res) => {
+    try {
+        const { doctorId } = req.query;
+        if (!doctorId) return res.status(400).json({ success: false, message: 'doctorId is required' });
+
+        const [[doc]] = await pool.query(
+            'SELECT selectione_les_jours_a_la_vance as limit_days, is_reservation_online FROM doctor WHERE id = ?',
+            [doctorId]
+        );
+
+        if (!doc || doc.is_reservation_online === 0) {
+            return res.status(200).json({ success: true, data: [], message: 'Booking disabled' });
+        }
+
+        const [avails] = await pool.query(
+            'SELECT day_of_week, selectione_les_number_of_appoi_by_day as max_slots FROM availability WHERE doctor_id = ?',
+            [doctorId]
+        );
+
+        if (avails.length === 0) return res.status(200).json({ success: true, data: [] });
+
+        const workingDaysMap = avails.reduce((acc, curr) => {
+            acc[curr.day_of_week.toLowerCase()] = curr.max_slots || 999;
+            return acc;
+        }, {});
+
+        const maxDays = doc.limit_days === 0 ? 365 : (doc.limit_days || 15);
+        const availableDates = [];
+        
+        // Scan loop
+        for (let i = 0; i <= maxDays; i++) {
+            const date = new Date();
+            date.setDate(date.getDate() + i);
+            const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+            
+            if (workingDaysMap[dayName]) {
+                const dateStr = date.getFullYear() + '-' + 
+                              String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                              String(date.getDate()).padStart(2, '0');
+                const limit = workingDaysMap[dayName];
+
+                const [[{count}]] = await pool.query(
+                    "SELECT COUNT(*) as count FROM appointment WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('annulé','absent')",
+                    [doctorId, dateStr]
+                );
+
+                if (count < limit) {
+                    availableDates.push(dateStr);
+                    // Return a reasonable number for the UI, e.g. next 20 available days
+                    if (availableDates.length >= 20) break;
+                }
+            }
+        }
+
+        res.status(200).json({ success: true, data: availableDates });
+    } catch (error) {
+        console.error('getAvailableDates error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};

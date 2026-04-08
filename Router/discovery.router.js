@@ -5,6 +5,7 @@ import {
     getDoctorDetails,
     getPatientAppointments,
     getAvailableSlotsForPatient,
+    getAvailableDates,
     bookAppointmentAsPatient,
     cancelAppointmentAsPatient,
 } from "../controller/discovery.controller.js";
@@ -17,6 +18,7 @@ discoveryRouter.get('/specialities', getSpecialities);
 discoveryRouter.get('/search', searchDoctors);
 discoveryRouter.get('/doctor-details/:id', getDoctorDetails);
 discoveryRouter.get('/available-slots', getAvailableSlotsForPatient);
+discoveryRouter.get('/available-dates', getAvailableDates);
 
 // Authenticated patient
 discoveryRouter.get('/my-appointments', verifyPatientToken, getPatientAppointments);
