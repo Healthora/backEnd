@@ -176,7 +176,12 @@ export const getPatientAppointments = async (req, res) => {
                 a.id, a.doctor_id, a.patient_id,
                 DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
                 DATE_FORMAT(a.start_time, '%H:%i')          AS start_time,
-                a.duration, a.status, a.note_doctor, a.note_patient, a.created_at,
+                a.duration, 
+                CASE 
+                    WHEN a.status IN ('en attente', 'confirmé') AND (a.appointment_date < CURDATE() OR (a.appointment_date = CURDATE() AND a.start_time < CURTIME())) THEN 'passe'
+                    ELSE a.status 
+                END AS status,
+                a.note_doctor, a.note_patient, a.created_at,
                 d.firstname  AS doctor_first_name,
                 d.lastname   AS doctor_last_name,
                 d.phone      AS doctor_phone,
