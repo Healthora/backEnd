@@ -13,12 +13,12 @@ import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
 const discoveryRouter = Router();
 
-// Public Discovery
+// Public Discovery - Important: specific routes before parameter routes
+discoveryRouter.get('/available-dates', getAvailableDates);
+discoveryRouter.get('/available-slots', getAvailableSlotsForPatient);
 discoveryRouter.get('/specialities', getSpecialities);
 discoveryRouter.get('/search', searchDoctors);
 discoveryRouter.get('/doctor-details/:id', getDoctorDetails);
-discoveryRouter.get('/available-slots', getAvailableSlotsForPatient);
-discoveryRouter.get('/available-dates', getAvailableDates);
 
 // Authenticated patient
 discoveryRouter.get('/my-appointments', verifyPatientToken, getPatientAppointments);
