@@ -431,7 +431,7 @@ export const getAvailableDates = async (req, res) => {
         if (!doctorId) return res.status(400).json({ success: false, message: 'doctorId is required' });
 
         const [[doc]] = await pool.query(
-            'SELECT selectione_les_jours_a_la_vance as limit_days, is_reservation_online FROM doctor WHERE id = ?',
+            'SELECT slot_duration, selectione_les_jours_a_la_vance as limit_days, is_reservation_online FROM doctor WHERE id = ?',
             [doctorId]
         );
 
@@ -454,31 +454,77 @@ export const getAvailableDates = async (req, res) => {
         const maxDays = doc.limit_days === 0 ? 365 : (doc.limit_days || 15);
         const availableDates = [];
         
+        // Setup for UTC+1 time (Algeria)
+        const nowLocalStr = new Date().toLocaleString("en-US", { timeZone: "Africa/Algiers" });
+        const now = new Date(nowLocalStr);
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+
         // Scan loop
         for (let i = 0; i <= maxDays; i++) {
-            const date = new Date();
+            const date = new Date(now);
             date.setDate(date.getDate() + i);
-            const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-            
-            if (workingDaysMap[dayName]) {
-                const dateStr = date.getFullYear() + '-' + 
-                              String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-                              String(date.getDate()).padStart(2, '0');
-                const limit = workingDaysMap[dayName];
+            date.setHours(0,0,0,0);
 
+            const dayNameEn = date.toLocaleDateString('en-US', { weekday: 'long' });
+            const dayNameLower = dayNameEn.toLowerCase();
+            
+            if (workingDaysMap[dayNameLower]) {
+                const dateStr = date.getFullYear() + '-' + 
+                               String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                               String(date.getDate()).padStart(2, '0');
+                const dailyLimit = workingDaysMap[dayNameLower];
+
+                // 1. Check daily cap
                 const [[{count}]] = await pool.query(
                     "SELECT COUNT(*) as count FROM appointment WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('annulé','absent')",
                     [doctorId, dateStr]
                 );
 
-                if (count < limit) {
+                if (count >= dailyLimit) continue;
+
+                // 2. Check if there is at least ONE slot that is not booked AND not in the past
+                const [dayAvails] = await pool.query(
+                    'SELECT start_time, end_time FROM availability WHERE doctor_id = ? AND day_of_week = ?',
+                    [doctorId, dayNameEn]
+                );
+
+                const slotDuration = doc.slot_duration || 30;
+                let hasAtLeastOneSlot = false;
+
+                const [booked] = await pool.query(
+                    "SELECT DATE_FORMAT(start_time, '%H:%i') AS start_time FROM appointment WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('annulé','absent')",
+                    [doctorId, dateStr]
+                );
+                const bookedTimes = booked.map(b => b.start_time);
+
+                for (const av of dayAvails) {
+                    const startRaw = av.start_time.substring(0, 5);
+                    const endRaw = av.end_time.substring(0, 5);
+                    const [sH, sM] = startRaw.split(':').map(Number);
+                    const [eH, eM] = endRaw.split(':').map(Number);
+                    let cur = sH * 60 + sM;
+                    const endTotal = eH * 60 + eM;
+
+                    while (cur + slotDuration <= endTotal) {
+                        const slotStr = `${String(Math.floor(cur/60)).padStart(2,'0')}:${String(cur%60).padStart(2,'0')}`;
+                        const isPast = (i === 0 && cur <= currentMins);
+                        const isBooked = bookedTimes.includes(slotStr);
+
+                        if (!isPast && !isBooked) {
+                            hasAtLeastOneSlot = true;
+                            break;
+                        }
+                        cur += slotDuration;
+                    }
+                    if (hasAtLeastOneSlot) break;
+                }
+
+                if (hasAtLeastOneSlot) {
                     availableDates.push(dateStr);
-                    // Return a reasonable number for the UI, e.g. next 20 available days
                     if (availableDates.length >= 20) break;
                 }
             }
         }
-
         res.status(200).json({ success: true, data: availableDates });
     } catch (error) {
         console.error('getAvailableDates error:', error);
