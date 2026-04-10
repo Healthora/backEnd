@@ -567,7 +567,10 @@ export const getAvailableDates = async (req, res) => {
 
                 if (hasAtLeastOneSlot) {
                     availableDates.push(dateStr);
-                    if (availableDates.length >= 20) break;
+                    // Increased cap: if doctor wants unlimited (maxDays=365), we return up to 100 dates.
+                    // If they have a specific limit, we stop when that limit is reached or we hit 100.
+                    const finalCap = doc.limit_days === 0 ? 100 : Math.max(20, doc.limit_days || 0);
+                    if (availableDates.length >= finalCap) break;
                 }
             }
         }
