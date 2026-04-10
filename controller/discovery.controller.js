@@ -73,25 +73,71 @@ export const searchDoctors = async (req, res) => {
 
         const [rows] = await pool.query(sql, params);
 
-        // Fetch first 3 slots for each doctor (simulation of closest available)
-        // In a real app, this would be a complex subquery or a separate lookup
+        // Fetch REAL first 3 available slots for each doctor
         const doctorsWithSlots = await Promise.all(rows.map(async (doctor) => {
-            const today = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
-            const [avails] = await pool.query('SELECT * FROM availability WHERE doctor_id = ? ORDER BY FIELD(day_of_week, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")', [doctor.id]);
-            
+            // Setup for UTC+1 time (Algeria)
+            const nowLocalStr = new Date().toLocaleString("en-US", { timeZone: "Africa/Algiers" });
+            const now = new Date(nowLocalStr);
+            const currentMins = now.getHours() * 60 + now.getMinutes();
+            const slotDuration = doctor.slot_duration || 30;
+
+            const [avails] = await pool.query(
+                'SELECT day_of_week, start_time, end_time, selectione_les_number_of_appoi_by_day as daily_limit FROM availability WHERE doctor_id = ?',
+                [doctor.id]
+            );
+
+            const workingDaysMap = avails.reduce((acc, curr) => {
+                acc[curr.day_of_week.toLowerCase()] = curr;
+                return acc;
+            }, {});
+
             let nextSlots = [];
-            if (avails.length > 0) {
-                // Return 3 slots based on their first available day
-                const firstDay = avails[0];
-                const start = firstDay.start_time.split(':')[0];
-                const duration = doctor.slot_duration || 30;
-                
-                // Simulate 3 slots starting from first available hour
-                nextSlots = [
-                    `${firstDay.day_of_week.substring(0, 3)}. ${start}:00`,
-                    `${firstDay.day_of_week.substring(0, 3)}. ${start}:30`,
-                    `${firstDay.day_of_week.substring(0, 3)}. 14:00`, // Sample fallback
-                ].slice(0, 3);
+            const maxScanDays = 7; // Only scan the next 7 days for the search preview to keep it fast
+
+            for (let i = 0; i <= maxScanDays; i++) {
+                const date = new Date(now);
+                date.setDate(date.getDate() + i);
+                const dayNameLower = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+
+                const workingDay = workingDaysMap[dayNameLower];
+                if (workingDay) {
+                    const dateStr = date.getFullYear() + '-' + 
+                                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                                   String(date.getDate()).padStart(2, '0');
+                    
+                    // Check daily limit
+                    const [[{count}]] = await pool.query(
+                        "SELECT COUNT(*) as count FROM appointment WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('annulé','absent')",
+                        [doctor.id, dateStr]
+                    );
+
+                    if (count >= (workingDay.daily_limit || 999)) continue;
+
+                    // Get booked times for this specific day
+                    const [booked] = await pool.query(
+                        "SELECT DATE_FORMAT(start_time, '%H:%i') AS start_time FROM appointment WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('annulé','absent')",
+                        [doctor.id, dateStr]
+                    );
+                    const bookedTimes = booked.map(b => b.start_time);
+
+                    // Generate slots for this day until we have 3
+                    const [sH, sM] = workingDay.start_time.split(':').map(Number);
+                    const [eH, eM] = workingDay.end_time.split(':').map(Number);
+                    let cur = sH * 60 + sM;
+                    const endTotal = eH * 60 + eM;
+
+                    while (cur + slotDuration <= endTotal && nextSlots.length < 3) {
+                        const slotStr = `${String(Math.floor(cur/60)).padStart(2,'0')}:${String(cur%60).padStart(2,'0')}`;
+                        const isPast = (i === 0 && cur <= currentMins);
+                        const isBooked = bookedTimes.includes(slotStr);
+
+                        if (!isPast && !isBooked) {
+                            nextSlots.push(`${dayNameLower.substring(0, 3).toUpperCase()} ${slotStr}`);
+                        }
+                        cur += slotDuration;
+                    }
+                }
+                if (nextSlots.length >= 3) break;
             }
 
             return {
