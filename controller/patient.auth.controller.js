@@ -249,6 +249,37 @@ export const updateProfile = async (req, res) => {
 };
 
 /**
+ * Get Patient Profile
+ * GET /patient-auth/profile
+ */
+export const getProfile = async (req, res) => {
+    try {
+        const patientId = req.patient.patientId;
+        const [patients] = await pool.query(
+            `SELECT p.id, p.firstname, p.lastname, p.phone, p.birthdate, p.gender, p.address,
+                    p.wilaya_id, p.commun_id, w.name AS wilaya_name, cm.name AS commune_name
+             FROM patient p
+             LEFT JOIN wilaya w  ON p.wilaya_id = w.id
+             LEFT JOIN commun cm ON p.commun_id = cm.id
+             WHERE p.id = ?`,
+            [patientId]
+        );
+
+        if (patients.length === 0) {
+            return res.status(404).json({ success: false, message: 'Patient non trouvé' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: patients[0]
+        });
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la récupération du profil' });
+    }
+};
+
+/**
  * Logout
  * POST /patient-auth/logout
  */

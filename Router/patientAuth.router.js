@@ -4,7 +4,8 @@ import {
     verifyOtp,
     patientSignUp,
     logout,
-    updateProfile
+    updateProfile,
+    getProfile
 } from "../controller/patient.auth.controller.js";
 import { verifyPatientToken } from "../middleware/auth.middleware.js";
 
@@ -18,6 +19,9 @@ patientAuthRouter.post('/verify-otp', verifyOtp);
 
 // Route for patient signup
 patientAuthRouter.post('/signup', patientSignUp);
+
+// Get profile route (protected)
+patientAuthRouter.get('/profile', verifyPatientToken, getProfile);
 
 // Update profile route (protected)
 patientAuthRouter.put('/profile', verifyPatientToken, updateProfile);
