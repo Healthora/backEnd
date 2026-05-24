@@ -35,7 +35,7 @@ pool.getConnection()
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://healthoraweb.netlify.app'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://healthoraweb.netlify.app', 'https://healthora-portal-client.vercel.app'];
 
 const corsOptions = {
   origin: function (origin, callback) {
