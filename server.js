@@ -37,12 +37,33 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://healthoraweb.netlify.app', 'https://healthora-portal-client.vercel.app'];
 
+// Ensure critical origins are always allowed
+const criticalOrigins = [
+  'https://healthora-portal-client.vercel.app',
+  'https://healthoraweb.netlify.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5174'
+];
+criticalOrigins.forEach(origin => {
+  if (!allowedOrigins.includes(origin)) {
+    allowedOrigins.push(origin);
+  }
+});
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
 
-    // Automatically allow local network IPs for testing on mobile devices
-    if (allowedOrigins.includes(origin) || origin.match(/^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/)) {
+    // Allow from allowedOrigins, local network IPs, or vercel/netlify preview domains
+    const isAllowed = 
+      allowedOrigins.includes(origin) || 
+      origin.match(/^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/) ||
+      origin.endsWith('.vercel.app') || 
+      origin.endsWith('.netlify.app') ||
+      origin.startsWith('http://localhost:');
+
+    if (isAllowed) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -50,7 +71,6 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
 
