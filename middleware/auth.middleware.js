@@ -18,7 +18,13 @@ export const verifyDoctorToken = async (req, res, next) => {
         const [doctors] = await pool.query('SELECT id, phone FROM doctor WHERE id = ?', [decoded.doctorId]);
         if (doctors.length === 0) return res.status(401).json({ success: false, message: 'Médecin non trouvé' });
 
-        req.doctor = { doctorId: doctors[0].id, phone: doctors[0].phone };
+        req.doctor = {
+            doctorId: doctors[0].id,
+            phone: decoded.phone,
+            role: decoded.role || 'doctor',
+            assistantId: decoded.assistantId || null,
+            permissions: decoded.permissions || null
+        };
         next();
     } catch (error) {
         if (error.name === 'TokenExpiredError') return res.status(401).json({ success: false, message: 'Token expiré' });
@@ -82,4 +88,28 @@ export const optionalAuth = async (req, res, next) => {
         next();
     }
 };
+
+export const checkPermission = (resource, action) => {
+    return (req, res, next) => {
+        // Doctors have all permissions
+        if (req.doctor && req.doctor.role === 'doctor') {
+            return next();
+        }
+
+        // Assistants check permissions dictionary
+        if (req.doctor && req.doctor.role === 'assistant') {
+            const permissions = req.doctor.permissions;
+            if (permissions && permissions[resource] && permissions[resource].includes(action)) {
+                return next();
+            }
+            return res.status(403).json({
+                success: false,
+                message: `Accès refusé : Vous n'avez pas la permission de ${action} les ${resource}s.`
+            });
+        }
+
+        return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    };
+};
+
 

@@ -1,25 +1,25 @@
 import { Router } from "express";
-import { 
-    getAllPatient, 
-    addPatient, 
-    updatePatient, 
+import {
+    getAllPatient,
+    addPatient,
+    updatePatient,
     deletePatient,
     searchAppUsers
 } from "../controller/patient.controller.js";
-import { verifyToken } from "../middleware/auth.middleware.js";
+import { verifyToken, checkPermission } from "../middleware/auth.middleware.js";
 
 const patientRoute = Router();
 
 patientRoute.use(verifyToken);
 
-patientRoute.post('/add', addPatient);
+patientRoute.post('/add', checkPermission('patient', 'add'), addPatient);
 
-patientRoute.get('/search/app-users', searchAppUsers);
+patientRoute.get('/search/app-users', checkPermission('patient', 'view'), searchAppUsers);
 
-patientRoute.get('/:id', getAllPatient);
+patientRoute.get('/:id', checkPermission('patient', 'view'), getAllPatient);
 
-patientRoute.put('/:patientId', updatePatient);
+patientRoute.put('/:patientId', checkPermission('patient', 'update'), updatePatient);
 
-patientRoute.delete('/:patientId', deletePatient);
+patientRoute.delete('/:patientId', checkPermission('patient', 'delete'), deletePatient);
 
 export default patientRoute;

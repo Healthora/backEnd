@@ -6,7 +6,7 @@ import {
   updateOrdonnance,
   deleteOrdonnance,
 } from "../controller/ordonnance.controller.js";
-import { verifyToken } from "../middleware/auth.middleware.js";
+import { verifyToken, checkPermission } from "../middleware/auth.middleware.js";
 
 const ordonnanceRouter = Router();
 
@@ -16,12 +16,12 @@ ordonnanceRouter.get('/', (req, res) => {
   res.send("Ordonnance route is working");
 });
 
-ordonnanceRouter.post('/', createOrdonnance);
+ordonnanceRouter.post('/', checkPermission('ordonnance', 'add'), createOrdonnance);
 
-ordonnanceRouter.get('/patient/:patient_id', getOrdonnancesByPatientId);
-ordonnanceRouter.get('/doctor/:doctor_id', getOrdonnancesByDoctor);
+ordonnanceRouter.get('/patient/:patient_id', checkPermission('ordonnance', 'view'), getOrdonnancesByPatientId);
+ordonnanceRouter.get('/doctor/:doctor_id', checkPermission('ordonnance', 'view'), getOrdonnancesByDoctor);
 
-ordonnanceRouter.put('/:id', updateOrdonnance);
-ordonnanceRouter.delete('/:id', deleteOrdonnance);
+ordonnanceRouter.put('/:id', checkPermission('ordonnance', 'update'), updateOrdonnance);
+ordonnanceRouter.delete('/:id', checkPermission('ordonnance', 'delete'), deleteOrdonnance);
 
 export default ordonnanceRouter;

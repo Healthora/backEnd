@@ -172,15 +172,36 @@ export const signIn = async (req, res) => {
             [phone]
         );
 
-        if (doctors.length === 0) {
+        let isDoctor = true;
+        let userRow = null;
+
+        if (doctors.length > 0) {
+            userRow = doctors[0];
+        } else {
+            // Check assistant table
+            const [assistants] = await pool.query(
+                `SELECT a.id, a.doctor_id, a.firstname, a.lastname, a.phone, a.password, a.permissions,
+                        c.name AS cabinet_name
+                 FROM assistant a
+                 JOIN doctor d ON a.doctor_id = d.id
+                 LEFT JOIN cabinet c ON d.id = c.doctor_id
+                 WHERE a.phone = ?`,
+                [phone]
+            );
+            if (assistants.length > 0) {
+                isDoctor = false;
+                userRow = assistants[0];
+            }
+        }
+
+        if (!userRow) {
             return res.status(401).json({
                 success: false,
                 message: 'Téléphone ou mot de passe incorrect'
             });
         }
 
-        const doctor = doctors[0];
-        const isValid = await bcrypt.compare(password, doctor.password);
+        const isValid = await bcrypt.compare(password, userRow.password);
         if (!isValid) {
             return res.status(401).json({
                 success: false,
@@ -188,33 +209,56 @@ export const signIn = async (req, res) => {
             });
         }
 
-        const token = signToken({ doctorId: doctor.id, phone: doctor.phone });
+        const tokenPayload = isDoctor
+            ? { doctorId: userRow.id, phone: userRow.phone, role: 'doctor' }
+            : { doctorId: userRow.doctor_id, assistantId: userRow.id, phone: userRow.phone, role: 'assistant', permissions: userRow.permissions };
 
-        res.status(200).json({
-            success: true,
-            message: 'Connexion réussie',
-            data: {
-                doctorId: doctor.id,
-                firstName: doctor.firstname,
-                lastName: doctor.lastname,
-                phone: doctor.phone,
-                specialty: doctor.specialty || '',
-                specialtyId: doctor.speciality_id || null,
-                bio: doctor.bio || '',
-                imgUrl: doctor.img_url || '',
-                isVerified: doctor.is_verified === 1,
-                cabinetId: doctor.cabinet_id || null,
-                cabinetName: doctor.cabinet_name || '',
-                cabinetAddress: doctor.cabinet_address || '',
-                wilayaId: doctor.wilaya_id || null,
-                wilaya: doctor.wilaya || '',
-                communId: doctor.commun_id || null,
-                commune: doctor.commune || '',
-                onlineBooking: doctor.is_reservation_online === 1,
-                createdAt: doctor.created_at,
-                token
-            }
-        });
+        const token = signToken(tokenPayload);
+
+        if (isDoctor) {
+            res.status(200).json({
+                success: true,
+                message: 'Connexion réussie',
+                data: {
+                    doctorId: userRow.id,
+                    firstName: userRow.firstname,
+                    lastName: userRow.lastname,
+                    phone: userRow.phone,
+                    specialty: userRow.specialty || '',
+                    specialtyId: userRow.speciality_id || null,
+                    bio: userRow.bio || '',
+                    imgUrl: userRow.img_url || '',
+                    isVerified: userRow.is_verified === 1,
+                    cabinetId: userRow.cabinet_id || null,
+                    cabinetName: userRow.cabinet_name || '',
+                    cabinetAddress: userRow.cabinet_address || '',
+                    wilayaId: userRow.wilaya_id || null,
+                    wilaya: userRow.wilaya || '',
+                    communId: userRow.commun_id || null,
+                    commune: userRow.commune || '',
+                    onlineBooking: userRow.is_reservation_online === 1,
+                    createdAt: userRow.created_at,
+                    token,
+                    role: 'doctor'
+                }
+            });
+        } else {
+            res.status(200).json({
+                success: true,
+                message: 'Connexion réussie',
+                data: {
+                    doctorId: userRow.doctor_id,
+                    assistantId: userRow.id,
+                    firstName: userRow.firstname,
+                    lastName: userRow.lastname,
+                    phone: userRow.phone,
+                    cabinetName: userRow.cabinet_name || '',
+                    permissions: typeof userRow.permissions === 'string' ? JSON.parse(userRow.permissions) : userRow.permissions,
+                    token,
+                    role: 'assistant'
+                }
+            });
+        }
     } catch (error) {
         console.error('Signin error:', error);
         res.status(500).json({

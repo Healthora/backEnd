@@ -22,9 +22,29 @@ const app = express();
 
 // Test DB Connection
 pool.getConnection()
-  .then(conn => {
+  .then(async conn => {
     console.log("✅ Database connected successfully!");
     conn.release();
+    
+    // Initialize Assistant table
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS assistant (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          doctor_id BIGINT UNSIGNED NOT NULL,
+          firstname VARCHAR(100) NOT NULL,
+          lastname VARCHAR(100) NOT NULL,
+          phone VARCHAR(20) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          permissions JSON NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (doctor_id) REFERENCES doctor(id) ON DELETE CASCADE
+        )
+      `);
+      console.log("✅ Table 'assistant' checked/created successfully!");
+    } catch (dbErr) {
+      console.error("❌ Failed to create 'assistant' table:", dbErr.message);
+    }
   })
   .catch(err => {
     console.error("❌ Database connection failed during startup:", err.message);
