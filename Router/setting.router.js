@@ -8,7 +8,10 @@ import {
     getAssistants,
     addAssistant,
     updateAssistant,
-    deleteAssistant
+    deleteAssistant,
+    getMedicalFields,
+    addMedicalField,
+    deleteMedicalField
 } from '../controller/setting.controller.js'
 import { verifyToken } from '../middleware/auth.middleware.js'
 
@@ -24,5 +27,10 @@ settingRouter.get('/assistants', verifyToken, getAssistants)
 settingRouter.post('/assistants', verifyToken, addAssistant)
 settingRouter.put('/assistants/:id', verifyToken, updateAssistant)
 settingRouter.delete('/assistants/:id', verifyToken, deleteAssistant)
+
+// Medical Fields routes
+settingRouter.get('/medical-fields', verifyToken, getMedicalFields)
+settingRouter.post('/medical-fields', verifyToken, addMedicalField)
+settingRouter.delete('/medical-fields/:id', verifyToken, deleteMedicalField)
 
 export default settingRouter;

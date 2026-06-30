@@ -45,6 +45,43 @@ pool.getConnection()
     } catch (dbErr) {
       console.error("❌ Failed to create 'assistant' table:", dbErr.message);
     }
+
+    // Initialize Doctor Medical Fields table
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS doctor_medical_field (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          doctor_id BIGINT UNSIGNED NOT NULL,
+          field_name VARCHAR(255) NOT NULL,
+          field_type VARCHAR(50) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (doctor_id) REFERENCES doctor(id) ON DELETE CASCADE
+        )
+      `);
+      console.log("✅ Table 'doctor_medical_field' checked/created successfully!");
+    } catch (dbErr) {
+      console.error("❌ Failed to create 'doctor_medical_field' table:", dbErr.message);
+    }
+
+    // Initialize Consultation Records table
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS consultation_record (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          appointment_id INT NOT NULL,
+          patient_id INT NOT NULL,
+          doctor_id BIGINT UNSIGNED NOT NULL,
+          record_data JSON NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (appointment_id) REFERENCES appointment(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patient(id) ON DELETE CASCADE,
+          FOREIGN KEY (doctor_id) REFERENCES doctor(id) ON DELETE CASCADE
+        )
+      `);
+      console.log("✅ Table 'consultation_record' checked/created successfully!");
+    } catch (dbErr) {
+      console.error("❌ Failed to create 'consultation_record' table:", dbErr.message);
+    }
   })
   .catch(err => {
     console.error("❌ Database connection failed during startup:", err.message);

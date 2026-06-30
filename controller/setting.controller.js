@@ -372,3 +372,76 @@ export const deleteAssistant = async (req, res) => {
         res.status(500).json({ success: false, message: "Erreur lors de la suppression de l'assistant" });
     }
 };
+
+// ─── DOCTOR MEDICAL FIELDS ───────────────────────────────────────────────────
+
+export const getMedicalFields = async (req, res) => {
+    try {
+        const doctorId = req.doctor.doctorId;
+        
+        const [fields] = await pool.query(
+            `SELECT id, field_name, field_type, created_at
+             FROM doctor_medical_field
+             WHERE doctor_id = ?
+             ORDER BY created_at ASC`,
+            [doctorId]
+        );
+
+        res.status(200).json({ success: true, data: fields });
+    } catch (error) {
+        console.error('getMedicalFields error:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la récupération des champs médicaux' });
+    }
+};
+
+export const addMedicalField = async (req, res) => {
+    try {
+        const doctorId = req.doctor.doctorId;
+        const { field_name, field_type } = req.body;
+
+        if (!field_name || !field_type) {
+            return res.status(400).json({ success: false, message: 'Le nom et le type du champ sont obligatoires' });
+        }
+
+        const validTypes = ['text', 'number', 'file'];
+        if (!validTypes.includes(field_type)) {
+            return res.status(400).json({ success: false, message: 'Type de champ invalide' });
+        }
+
+        const [result] = await pool.query(
+            `INSERT INTO doctor_medical_field (doctor_id, field_name, field_type)
+             VALUES (?, ?, ?)`,
+            [doctorId, field_name, field_type]
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Champ ajouté avec succès',
+            data: { id: result.insertId, field_name, field_type }
+        });
+    } catch (error) {
+        console.error('addMedicalField error:', error);
+        res.status(500).json({ success: false, message: "Erreur lors de l'ajout du champ" });
+    }
+};
+
+export const deleteMedicalField = async (req, res) => {
+    try {
+        const doctorId = req.doctor.doctorId;
+        const { id } = req.params;
+
+        const [result] = await pool.query(
+            'DELETE FROM doctor_medical_field WHERE id = ? AND doctor_id = ?',
+            [id, doctorId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Champ non trouvé' });
+        }
+
+        res.status(200).json({ success: true, message: 'Champ supprimé avec succès' });
+    } catch (error) {
+        console.error('deleteMedicalField error:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la suppression du champ' });
+    }
+};
