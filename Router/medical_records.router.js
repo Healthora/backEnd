@@ -4,6 +4,7 @@ import {
   getPrescriptionByAppointment,
   createConsultationRecord,
   getPatientConsultationHistory,
+  deleteConsultationRecord,
   getMyDossier
 } from "../controller/medical_records.controller.js";
 import { verifyPatientToken, verifyToken } from "../middleware/auth.middleware.js";
@@ -32,6 +33,7 @@ medicalRecordsRouter.get('/appointment/:appointmentId', verifyPatientToken, getP
 
 medicalRecordsRouter.post('/consultation', verifyToken, uploadDocs.any(), createConsultationRecord);
 medicalRecordsRouter.get('/consultation/patient/:patientId', verifyToken, getPatientConsultationHistory);
+medicalRecordsRouter.delete('/consultation/:id', verifyToken, deleteConsultationRecord);
 
 // ─── PATIENT DOSSIER (PATIENT) ──────────────────────────────────────────────
 

@@ -211,6 +211,27 @@ export const getPatientConsultationHistory = async (req, res) => {
     }
 };
 
+export const deleteConsultationRecord = async (req, res) => {
+    try {
+        const doctorId = req.doctor.doctorId;
+        const { id } = req.params;
+
+        const [result] = await pool.query(
+            'DELETE FROM consultation_record WHERE id = ? AND doctor_id = ?',
+            [id, doctorId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Dossier non trouvé ou non autorisé' });
+        }
+
+        res.status(200).json({ success: true, message: 'Dossier supprimé avec succès' });
+    } catch (error) {
+        console.error('deleteConsultationRecord error:', error);
+        res.status(500).json({ success: false, message: 'Erreur lors de la suppression du dossier' });
+    }
+};
+
 // ─── PATIENT DOSSIER (PATIENT) ──────────────────────────────────────────────
 
 export const getMyDossier = async (req, res) => {
