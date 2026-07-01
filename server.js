@@ -72,10 +72,7 @@ pool.getConnection()
           patient_id INT NOT NULL,
           doctor_id BIGINT UNSIGNED NOT NULL,
           record_data JSON NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (appointment_id) REFERENCES appointment(id) ON DELETE CASCADE,
-          FOREIGN KEY (patient_id) REFERENCES patient(id) ON DELETE CASCADE,
-          FOREIGN KEY (doctor_id) REFERENCES doctor(id) ON DELETE CASCADE
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
       console.log("✅ Table 'consultation_record' checked/created successfully!");
