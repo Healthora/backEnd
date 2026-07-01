@@ -7,8 +7,13 @@ import {
   getMyDossier
 } from "../controller/medical_records.controller.js";
 import { verifyPatientToken, verifyToken } from "../middleware/auth.middleware.js";
-import { upload } from "../controller/setting.controller.js";
+import multer from "multer";
 
+const storage = multer.memoryStorage();
+const uploadDocs = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10 MB limit for documents
+});
 const medicalRecordsRouter = Router();
 
 /**
@@ -25,7 +30,7 @@ medicalRecordsRouter.get('/appointment/:appointmentId', verifyPatientToken, getP
 
 // ─── CONSULTATION RECORDS (DOCTOR) ──────────────────────────────────────────
 
-medicalRecordsRouter.post('/consultation', verifyToken, upload.any(), createConsultationRecord);
+medicalRecordsRouter.post('/consultation', verifyToken, uploadDocs.any(), createConsultationRecord);
 medicalRecordsRouter.get('/consultation/patient/:patientId', verifyToken, getPatientConsultationHistory);
 
 // ─── PATIENT DOSSIER (PATIENT) ──────────────────────────────────────────────
